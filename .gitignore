@@ -90,6 +90,10 @@ Thumbs.db
 test-*.js
 ~$*.xlsx
 
+# Excel files with data
+*.xlsx
+*.xls
+
 # IDE files
 *.swp
 *.swo
