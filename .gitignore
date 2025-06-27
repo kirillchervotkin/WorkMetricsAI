@@ -82,4 +82,15 @@ public
 .DS_Store
 
 # Windows system files
-Thumbs.db 
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+test-*.js
+~$*.xlsx
+
+# IDE files
+*.swp
+*.swo
+*~
