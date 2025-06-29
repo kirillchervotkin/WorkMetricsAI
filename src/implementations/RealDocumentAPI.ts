@@ -55,11 +55,28 @@ export class RealDocumentAPI implements IDocumentAPI {
     try {
       console.log(`🔍 Real API: Поиск пользователей по именам ${params.names.join(', ')}`);
 
-      const response: AxiosResponse = await this.client.get('/users', {
-        params: {
-          users: params.names.join(',')  // Исправлено: используем 'users' вместо 'names'
+      // Пробуем оба варианта параметров из-за противоречия в документации
+      let response: AxiosResponse;
+      try {
+        // Сначала пробуем 'users' как указано в описании
+        response = await this.client.get('/users', {
+          params: {
+            users: params.names.join(',')
+          }
+        });
+      } catch (error: any) {
+        if (error.response?.status === 400) {
+          console.log('🔄 Пробуем параметр userId вместо users');
+          // Пробуем 'userId' как в примере документации
+          response = await this.client.get('/users', {
+            params: {
+              userId: params.names.join(',')
+            }
+          });
+        } else {
+          throw error;
         }
-      });
+      }
 
       if (response.status === 200 && response.data) {
         const users: User[] = Array.isArray(response.data) ? response.data.map((user: any) => ({
@@ -94,30 +111,46 @@ export class RealDocumentAPI implements IDocumentAPI {
 
   async getAllUsers(): Promise<APIResponse<User[]>> {
     try {
-      console.log('🔍 Real API: Получение всех пользователей через /tasks');
+      console.log('🔍 Real API: Попытка получить всех пользователей через /stufftime');
 
-      // Используем endpoint /tasks без userId для получения всех задач,
+      // Используем endpoint /stufftime без параметров для получения всех трудозатрат
       // из которых можем извлечь пользователей
-      const response: AxiosResponse = await this.client.get('/tasks');
+      const response: AxiosResponse = await this.client.get('/stufftime');
 
       if (response.status === 200 && response.data) {
-        const tasks = Array.isArray(response.data) ? response.data : [];
+        const stufftimeData = Array.isArray(response.data) ? response.data : [];
 
-        // Извлекаем уникальных пользователей из задач
-        const userIds = new Set<string>();
+        console.log(`🔍 Real API: Структура первой записи stufftime:`, stufftimeData[0] ? JSON.stringify(stufftimeData[0], null, 2) : 'Нет записей');
+        console.log(`🔍 Real API: Всего записей stufftime: ${stufftimeData.length}`);
+
+        // Извлекаем уникальных пользователей из трудозатрат
+        const userNames = new Set<string>();
         const users: User[] = [];
 
-        tasks.forEach((task: any) => {
-          if (task.userId && !userIds.has(task.userId)) {
-            userIds.add(task.userId);
+        stufftimeData.forEach((entry: any, index: number) => {
+          // Логируем первые 3 записи для анализа структуры
+          if (index < 3) {
+            console.log(`🔍 Запись ${index + 1}:`, {
+              user: entry.user,
+              countOfMinutes: entry.countOfMinutes,
+              allFields: Object.keys(entry)
+            });
+          }
+
+          if (entry.user && !userNames.has(entry.user)) {
+            userNames.add(entry.user);
             users.push({
-              userName: task.userName || `Пользователь ${task.userId}`,
-              userId: task.userId
+              userName: entry.user,
+              userId: `user_${users.length + 1}` // Генерируем временный ID
             });
           }
         });
 
         console.log(`✅ Real API: Найдено уникальных пользователей: ${users.length}`);
+        if (users.length > 0) {
+          console.log(`🔍 Первые пользователи:`, users.slice(0, 3));
+        }
+
         return {
           success: true,
           data: users,
@@ -131,7 +164,7 @@ export class RealDocumentAPI implements IDocumentAPI {
         message: 'Не удалось получить данные'
       };
     } catch (error: any) {
-      console.error('❌ Real API Error (getAllUsers):', error.message);
+      console.error('❌ Real API Error (getAllUsers через stufftime):', error.message);
       return {
         success: false,
         data: [],
@@ -167,14 +200,19 @@ export class RealDocumentAPI implements IDocumentAPI {
       });
 
       if (response.status === 200 && response.data) {
-        const tasks: Task[] = Array.isArray(response.data) ? response.data.map((task: any) => ({
+        const rawTasks = Array.isArray(response.data) ? response.data : [];
+
+        console.log(`🔍 Real API: Структура первой задачи в getEmployeeTasks:`, rawTasks[0] ? JSON.stringify(rawTasks[0], null, 2) : 'Нет задач');
+        console.log(`🔍 Real API: Всего задач: ${rawTasks.length}`);
+
+        const tasks: Task[] = rawTasks.map((task: any) => ({
           id: task.id || task.taskId || task.guid,
           title: task.title || task.name || task.description,
           description: task.description || task.title || '',
           date: task.date || task.deadline || task.dueDate,
           status: task.status || 'active',
           hours: task.hours || task.plannedHours || 0
-        })) : [];
+        }));
 
         console.log(`✅ Real API: Найдено задач: ${tasks.length}`);
         return {
@@ -276,10 +314,12 @@ export class RealDocumentAPI implements IDocumentAPI {
     try {
       console.log(`🏗️ Real API: Получение проектов ${params.name ? `по имени: ${params.name}` : ''}`);
 
+      // Согласно документации, projectName обязательный параметр
+      const projectName = params.name || 'АйТи План';
+
       const response: AxiosResponse = await this.client.get('/project', {
         params: {
-          name: params.name,
-          limit: params.limit || 50
+          projectName: projectName
         }
       });
 
