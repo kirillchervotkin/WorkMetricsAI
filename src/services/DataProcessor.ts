@@ -39,17 +39,31 @@ export class DataProcessor {
 
   async processQueryData(userQuery: string): Promise<ProcessedData> {
     console.log('🔍 Анализируем запрос для умной загрузки данных...');
-    
-    // Анализируем запрос
-    const queryContext = this.analyzeQuery(userQuery);
+
+    // Сначала загружаем всех сотрудников
+    console.log('👥 Загружаем список всех сотрудников...');
+    const allEmployees = await this.adapter.getAllEmployees();
+
+    if (!allEmployees.success || allEmployees.data.length === 0) {
+      console.log('❌ Не удалось загрузить сотрудников');
+      throw new Error('Не удалось загрузить список сотрудников');
+    }
+
+    console.log(`✅ Загружено сотрудников: ${allEmployees.data.length}`);
+
+    // Анализируем запрос с учетом реальных имен сотрудников
+    const queryContext = this.analyzeQuery(userQuery, allEmployees.data);
     console.log('📊 Контекст запроса:', queryContext);
 
     // Загружаем только релевантные данные
     const rawData = await this.loadRelevantData(queryContext);
-    
+
+    // Добавляем список всех сотрудников в данные
+    rawData.users = allEmployees.data;
+
     // Обрабатываем и агрегируем данные
     const processedData = this.aggregateData(rawData, queryContext);
-    
+
     console.log('✅ Данные обработаны для LLM:', {
       employees: processedData.employees.length,
       recentActivity: processedData.recentActivity.length,
@@ -59,11 +73,11 @@ export class DataProcessor {
     return processedData;
   }
 
-  private analyzeQuery(query: string) {
+  private analyzeQuery(query: string, employees: any[]) {
     const queryLower = query.toLowerCase();
-    
+
     return {
-      employeeName: this.extractEmployeeName(queryLower),
+      employeeName: this.extractEmployeeName(queryLower, employees),
       timeframe: this.extractTimeframe(queryLower),
       queryType: this.detectQueryType(queryLower),
       needsDetailed: queryLower.includes('подробно') || queryLower.includes('детально'),
@@ -71,8 +85,31 @@ export class DataProcessor {
     };
   }
 
-  private extractEmployeeName(query: string): string | undefined {
-    // Ищем любые имена в запросе (русские и английские)
+  private extractEmployeeName(query: string, employees: any[]): string | undefined {
+    console.log('🔍 Ищем имя сотрудника в запросе:', query);
+    console.log('📋 Доступные сотрудники:', employees.map(e => e.name).slice(0, 5), '...');
+
+    // Сначала ищем точные совпадения с именами из базы
+    for (const employee of employees) {
+      const fullName = employee.name.toLowerCase();
+      const nameParts = fullName.split(' ');
+
+      // Проверяем полное имя
+      if (query.includes(fullName)) {
+        console.log('✅ Найдено полное имя:', employee.name);
+        return employee.name;
+      }
+
+      // Проверяем части имени (имя, фамилия, отчество)
+      for (const part of nameParts) {
+        if (part.length > 2 && query.includes(part)) {
+          console.log('✅ Найдена часть имени:', part, '→', employee.name);
+          return employee.name;
+        }
+      }
+    }
+
+    // Если точных совпадений нет, ищем по паттернам
     const namePatterns = [
       // Полные имена (Фамилия Имя Отчество)
       /([А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+)/g,
@@ -87,10 +124,20 @@ export class DataProcessor {
     for (const pattern of namePatterns) {
       const matches = query.match(pattern);
       if (matches && matches.length > 0) {
-        // Возвращаем первое найденное имя
-        return matches[0].trim();
+        const foundName = matches[0].trim();
+        console.log('🔍 Найден паттерн имени:', foundName);
+
+        // Ищем похожее имя в базе
+        for (const employee of employees) {
+          if (employee.name.toLowerCase().includes(foundName.toLowerCase())) {
+            console.log('✅ Найдено похожее имя:', foundName, '→', employee.name);
+            return employee.name;
+          }
+        }
       }
     }
+
+    console.log('❌ Имя сотрудника не найдено в запросе');
     return undefined;
   }
 
