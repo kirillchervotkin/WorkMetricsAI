@@ -49,7 +49,9 @@ async function analyzeWithLLM(userQuery: string, processedData: any): Promise<st
 
     if (response) {
       console.log("✅ LLM проанализировал обработанные данные");
-      return response;
+      // Очищаем неподдерживаемые HTML теги
+      const cleanResponse = cleanUnsupportedHtmlTags(response);
+      return cleanResponse;
     } else {
       console.log("⚠️ LLM недоступен, fallback");
       return "❌ LLM сервис временно недоступен. Попробуйте позже.";
@@ -175,7 +177,35 @@ function formatDataForLLM(processedData: any, userQuery: string): string {
   context += `• Вместо "Неизвестная задача" используй "Задача №1", "Задача №2" и т.д.\n`;
   context += `• Если есть информация о просрочке - обязательно включи её в ответ\n`;
   context += `• Если данных за период нет - честно об этом скажи\n`;
-  context += `• Используй HTML разметку для форматирования ответа\n`;
+  context += `• ВАЖНО: Используй только поддерживаемые Telegram HTML теги: <b>, <i>, <code>, <pre>\n`;
+  context += `• НЕ используй теги <ul>, <ol>, <li> - вместо них используй символы • и цифры\n`;
+  context += `• Форматируй списки как обычный текст с символами маркеров\n`;
+  context += `• Ограничь длину ответа до 4000 символов\n`;
 
   return context;
+}
+
+/**
+ * Очищает неподдерживаемые Telegram HTML теги
+ */
+function cleanUnsupportedHtmlTags(text: string): string {
+  let cleaned = text;
+
+  // Удаляем неподдерживаемые теги и заменяем их на простое форматирование
+  cleaned = cleaned.replace(/<ul>/g, '');
+  cleaned = cleaned.replace(/<\/ul>/g, '');
+  cleaned = cleaned.replace(/<ol>/g, '');
+  cleaned = cleaned.replace(/<\/ol>/g, '');
+  cleaned = cleaned.replace(/<li>/g, '• ');
+  cleaned = cleaned.replace(/<\/li>/g, '\n');
+
+  // Убираем лишние переносы строк
+  cleaned = cleaned.replace(/\n\n\n+/g, '\n\n');
+
+  // Ограничиваем длину до 4000 символов
+  if (cleaned.length > 4000) {
+    cleaned = cleaned.substring(0, 3950) + '...\n\n<i>Ответ сокращен</i>';
+  }
+
+  return cleaned.trim();
 }
