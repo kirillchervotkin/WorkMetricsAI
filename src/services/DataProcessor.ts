@@ -7,6 +7,7 @@ export interface ProcessedData {
     totalTimeEntries: number;
     totalProjects: number;
     dateRange: string;
+    hasOverdueInfo?: boolean;
   };
   employees: Array<{
     name: string;
@@ -31,6 +32,7 @@ export interface ProcessedData {
       projectId: string;
       workType: string;
     }>;
+    hasOverdueTasks?: boolean;
   }>;
   recentActivity: Array<{
     date: string;
@@ -45,6 +47,11 @@ export interface ProcessedData {
     hours: number;
     status: string;
   }>;
+  overdueInfo?: {
+    hasOverdue: boolean;
+    employeeName?: string;
+    details?: string;
+  };
 }
 
 export class DataProcessor {
@@ -55,30 +62,23 @@ export class DataProcessor {
   }
 
   async processQueryData(userQuery: string): Promise<ProcessedData> {
-    console.log('🔍 Анализируем запрос для умной загрузки данных...');
+    console.log('🔍 Начинаем последовательную обработку запроса...');
 
-    // Сначала загружаем всех сотрудников
-    console.log('👥 Загружаем список всех сотрудников...');
-    const allEmployees = await this.adapter.getAllEmployees();
+    // ЭТАП 1: Загружаем всех сотрудников из базы данных
+    console.log('👥 ЭТАП 1: Загружаем список всех сотрудников...');
+    const allEmployees = await this.loadAllEmployees();
 
-    if (!allEmployees.success || allEmployees.data.length === 0) {
-      console.log('❌ Не удалось загрузить сотрудников');
-      throw new Error('Не удалось загрузить список сотрудников');
-    }
-
-    console.log(`✅ Загружено сотрудников: ${allEmployees.data.length}`);
-
-    // Анализируем запрос с учетом реальных имен сотрудников
-    const queryContext = this.analyzeQuery(userQuery, allEmployees.data);
+    // ЭТАП 2: Анализируем запрос и определяем что нужно загружать
+    console.log('🧠 ЭТАП 2: Анализируем запрос и определяем стратегию...');
+    const queryContext = this.analyzeQueryWithEmployees(userQuery, allEmployees);
     console.log('📊 Контекст запроса:', queryContext);
 
-    // Загружаем только релевантные данные
-    const rawData = await this.loadRelevantData(queryContext);
+    // ЭТАП 3: Последовательная загрузка данных в зависимости от запроса
+    console.log('📥 ЭТАП 3: Последовательная загрузка релевантных данных...');
+    const rawData = await this.loadDataSequentially(queryContext);
 
-    // Добавляем список всех сотрудников в данные
-    rawData.users = allEmployees.data;
-
-    // Обрабатываем и агрегируем данные
+    // ЭТАП 4: Обработка и агрегация данных
+    console.log('🔄 ЭТАП 4: Обработка и агрегация данных...');
     const processedData = this.aggregateData(rawData, queryContext);
 
     console.log('✅ Данные обработаны для LLM:', {
@@ -88,6 +88,69 @@ export class DataProcessor {
     });
 
     return processedData;
+  }
+
+  private async loadAllEmployees() {
+    console.log('👥 Загружаем список всех сотрудников из базы данных...');
+    const allEmployees = await this.adapter.getAllEmployees();
+
+    if (!allEmployees.success || allEmployees.data.length === 0) {
+      console.log('❌ Не удалось загрузить сотрудников');
+      throw new Error('Не удалось загрузить список сотрудников');
+    }
+
+    console.log(`✅ Загружено сотрудников: ${allEmployees.data.length}`);
+    return allEmployees.data;
+  }
+
+  private analyzeQueryWithEmployees(query: string, employees: any[]) {
+    const queryLower = query.toLowerCase();
+    console.log('🔍 Анализируем запрос:', queryLower);
+
+    const context = {
+      employeeName: this.extractEmployeeName(queryLower, employees),
+      timeframe: this.extractTimeframe(queryLower),
+      queryType: this.detectQueryType(queryLower),
+      needsDetailed: queryLower.includes('подробно') || queryLower.includes('детально'),
+      needsStats: queryLower.includes('статистика') || queryLower.includes('сколько') || queryLower.includes('количество'),
+      needsTasks: this.needsTasks(queryLower),
+      needsTimeEntries: this.needsTimeEntries(queryLower),
+      needsProjects: this.needsProjects(queryLower),
+      needsOverdue: this.needsOverdue(queryLower),
+      employees: employees
+    };
+
+    console.log('📋 Определены потребности в данных:', {
+      tasks: context.needsTasks,
+      timeEntries: context.needsTimeEntries,
+      projects: context.needsProjects,
+      overdue: context.needsOverdue
+    });
+
+    return context;
+  }
+
+  private needsTasks(query: string): boolean {
+    return query.includes('задач') || query.includes('задачи') ||
+           query.includes('что делал') || query.includes('работал над') ||
+           query.includes('выполнил') || query.includes('сделал');
+  }
+
+  private needsTimeEntries(query: string): boolean {
+    return query.includes('время') || query.includes('часов') ||
+           query.includes('трудозатрат') || query.includes('сколько работал') ||
+           query.includes('отработал') || query.includes('потратил');
+  }
+
+  private needsProjects(query: string): boolean {
+    return query.includes('проект') || query.includes('проекты') ||
+           query.includes('проектах') || query.includes('по проекту');
+  }
+
+  private needsOverdue(query: string): boolean {
+    return query.includes('просрочен') || query.includes('просрочка') ||
+           query.includes('дедлайн') || query.includes('опоздал') ||
+           query.includes('не успел') || query.includes('задержка');
   }
 
   private analyzeQuery(query: string, employees: any[]) {
@@ -298,7 +361,159 @@ export class DataProcessor {
     if (query.includes('задач') || query.includes('задачи')) return 'tasks';
     if (query.includes('время') || query.includes('часов')) return 'time';
     if (query.includes('проект') || query.includes('проекты')) return 'projects';
+    if (query.includes('просрочен') || query.includes('просрочка')) return 'overdue';
     return 'general';
+  }
+
+  private async loadDataSequentially(context: any) {
+    console.log('📥 Начинаем последовательную загрузку данных...');
+
+    const result: any = {
+      users: context.employees,
+      workTypes: [],
+      tasks: [],
+      timeEntries: [],
+      projects: [],
+      overdueInfo: null
+    };
+
+    // Всегда загружаем типы работ (быстрый запрос)
+    console.log('⚙️ Загружаем типы работ...');
+    try {
+      result.workTypes = await this.adapter.getWorkTypes();
+      console.log(`✅ Загружено типов работ: ${result.workTypes.length}`);
+    } catch (error) {
+      console.log('⚠️ Ошибка загрузки типов работ:', error);
+    }
+
+    // Загружаем задачи если нужно
+    if (context.needsTasks) {
+      console.log('📋 Загружаем задачи...');
+      try {
+        const tasksResponse = await this.adapter.getEmployeeTasks({
+          employee_name: context.employeeName,
+          limit: context.employeeName ? 100 : 50
+        });
+        result.tasks = tasksResponse.success ? tasksResponse.data : [];
+        console.log(`✅ Загружено задач: ${result.tasks.length}`);
+      } catch (error) {
+        console.log('⚠️ Ошибка загрузки задач:', error);
+      }
+    }
+
+    // Загружаем записи времени если нужно
+    if (context.needsTimeEntries) {
+      console.log('⏰ Загружаем записи времени...');
+      try {
+        const timeResponse = await this.adapter.getTimeEntries({
+          employee_name: context.employeeName,
+          start_date: context.timeframe.start,
+          end_date: context.timeframe.end,
+          limit: context.employeeName ? 200 : 100
+        });
+        result.timeEntries = timeResponse.success ? timeResponse.data : [];
+        console.log(`✅ Загружено записей времени: ${result.timeEntries.length}`);
+      } catch (error) {
+        console.log('⚠️ Ошибка загрузки записей времени:', error);
+      }
+    }
+
+    // Загружаем проекты если нужно
+    if (context.needsProjects) {
+      console.log('🏗️ Загружаем проекты...');
+      try {
+        const projectsResponse = await this.adapter.getProjects({ limit: 30 });
+        result.projects = projectsResponse.success ? projectsResponse.data : [];
+        console.log(`✅ Загружено проектов: ${result.projects.length}`);
+      } catch (error) {
+        console.log('⚠️ Ошибка загрузки проектов:', error);
+      }
+    }
+
+    // Проверяем просрочку если нужно
+    if (context.needsOverdue && context.employeeName) {
+      console.log('⚠️ Проверяем просроченные задачи...');
+      try {
+        // Найдем userId сотрудника
+        const employee = context.employees.find((emp: any) =>
+          emp.name.toLowerCase().includes(context.employeeName.toLowerCase())
+        );
+
+        if (employee && employee.id) {
+          result.overdueInfo = await this.checkOverdueTasks(employee.id);
+          console.log(`✅ Проверка просрочки завершена:`, result.overdueInfo);
+        }
+      } catch (error) {
+        console.log('⚠️ Ошибка проверки просрочки:', error);
+      }
+    }
+
+    console.log('📊 Итоговая статистика загруженных данных:', {
+      users: result.users.length,
+      workTypes: result.workTypes.length,
+      tasks: result.tasks.length,
+      timeEntries: result.timeEntries.length,
+      projects: result.projects.length,
+      hasOverdueInfo: !!result.overdueInfo
+    });
+
+    return result;
+  }
+
+  private async checkOverdueTasks(userId: string) {
+    console.log(`⚠️ Проверяем просроченные задачи для пользователя: ${userId}`);
+
+    try {
+      // Пытаемся использовать legacy API для проверки просрочки
+      // Поскольку в новом API нет метода checkOverdueTasks, используем адаптер
+      const api = this.adapter as any;
+
+      if (api.api && typeof api.api.checkOverdueTasks === 'function') {
+        const result = await api.api.checkOverdueTasks(userId);
+        return {
+          hasOverdue: result.result || false,
+          details: result.result ? 'Найдены просроченные задачи' : 'Просроченных задач нет'
+        };
+      } else {
+        // Fallback: анализируем задачи на просрочку
+        console.log('📋 Legacy API недоступен, анализируем задачи на просрочку...');
+        // Найдем имя пользователя по userId
+        const employee = this.findEmployeeName(userId, []);
+        const tasksResponse = await this.adapter.getEmployeeTasks({
+          employee_name: employee || undefined,
+          limit: 100
+        });
+
+        if (tasksResponse.success) {
+          const today = new Date();
+          const overdueTasks = tasksResponse.data.filter((task: any) => {
+            if (task.date && task.status !== 'completed') {
+              const taskDate = new Date(task.date);
+              return taskDate < today;
+            }
+            return false;
+          });
+
+          return {
+            hasOverdue: overdueTasks.length > 0,
+            details: overdueTasks.length > 0
+              ? `Найдено ${overdueTasks.length} просроченных задач`
+              : 'Просроченных задач нет'
+          };
+        }
+      }
+
+      return {
+        hasOverdue: false,
+        details: 'Не удалось проверить просрочку'
+      };
+    } catch (error) {
+      console.log('❌ Ошибка проверки просрочки:', error);
+      return {
+        hasOverdue: false,
+        details: 'Ошибка при проверке просрочки'
+      };
+    }
   }
 
   private async loadRelevantData(context: any) {
@@ -340,24 +555,46 @@ export class DataProcessor {
     // Группируем отфильтрованные данные по сотрудникам
     const employeeStats = this.groupByEmployee(filteredData);
 
+    // Добавляем информацию о просрочке к сотрудникам
+    if (rawData.overdueInfo && context.employeeName) {
+      const targetEmployee = employeeStats.find(emp =>
+        emp.name.toLowerCase().includes(context.employeeName.toLowerCase())
+      );
+      if (targetEmployee) {
+        targetEmployee.hasOverdueTasks = rawData.overdueInfo.hasOverdue;
+      }
+    }
+
     // Получаем активность за запрашиваемый период
     const recentActivity = this.getRecentActivity(filteredData, 100);
 
     // Задачи за запрашиваемый период
     const topTasks = this.getTopTasks(filteredData, 50);
 
-    return {
+    const result: ProcessedData = {
       summary: {
-        totalUsers: rawData.users.length, // Общее количество пользователей
-        totalTasks: filteredData.tasks.length, // Задачи за период
-        totalTimeEntries: filteredData.timeEntries.length, // Записи времени за период
-        totalProjects: filteredData.projects.length, // Проекты за период
-        dateRange: context.timeframe.label
+        totalUsers: rawData.users.length,
+        totalTasks: filteredData.tasks.length,
+        totalTimeEntries: filteredData.timeEntries.length,
+        totalProjects: filteredData.projects.length,
+        dateRange: context.timeframe.label,
+        hasOverdueInfo: !!rawData.overdueInfo
       },
       employees: employeeStats,
       recentActivity,
       topTasks
     };
+
+    // Добавляем информацию о просрочке если есть
+    if (rawData.overdueInfo) {
+      result.overdueInfo = {
+        hasOverdue: rawData.overdueInfo.hasOverdue,
+        employeeName: context.employeeName,
+        details: rawData.overdueInfo.details
+      };
+    }
+
+    return result;
   }
 
   // Фильтрует данные по временному диапазону
