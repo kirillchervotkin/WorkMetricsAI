@@ -118,6 +118,7 @@ export interface ILegacyDocumentAPI {
 
 export interface IDocumentAPI {
   getUsersByNames(params: { names: string[] }): Promise<APIResponse<User[]>>;
+  getAllUsers?(): Promise<APIResponse<User[]>>; // Новый метод для получения всех пользователей
   getEmployeeTasks(params: {
     employee_name?: string;
     userId?: string;

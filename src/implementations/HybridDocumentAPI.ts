@@ -76,6 +76,14 @@ export class HybridDocumentAPI implements IDocumentAPI {
     );
   }
 
+  async getAllUsers(): Promise<APIResponse<User[]>> {
+    return this.tryRealAPIWithFallback(
+      () => this.realAPI.getAllUsers(),
+      () => this.mockAPI.getUsersByNames({ names: [""] }), // Fallback для Mock API
+      'getAllUsers'
+    );
+  }
+
   async getEmployeeTasks(params: { 
     employee_name?: string; 
     userId?: string; 

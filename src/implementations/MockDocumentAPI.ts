@@ -22,16 +22,38 @@ export class MockDocumentAPI implements ILegacyDocumentAPI {
   private users: IUser[] = [
     { userName: "Золотарев Сергей Александрович", userId: "5d99b0f7-6675-11ee-b922-b52194aab495" },
     { userName: "Червоткин Кирилл Сергеевич", userId: "7d44b0f7-3313-11ee-b922-b52194aab947" },
-    { userName: "Артем Разработчик", userId: "8e55c1f8-4424-22ff-c933-c63295bbc058" },
-    { userName: "Мария Тестировщик", userId: "9f66d2f9-5535-33gg-d044-d74306ccd169" },
-    { userName: "Иван Аналитик", userId: "0a77e3fa-6646-44hh-e155-e85417dde270" }
+    { userName: "Артемов Артем Владимирович", userId: "8e55c1f8-4424-22ff-c933-c63295bbc058" },
+    { userName: "Мария Ивановна Тестова", userId: "9f66d2f9-5535-33gg-d044-d74306ccd169" },
+    { userName: "Иванов Иван Петрович", userId: "0a77e3fa-6646-44hh-e155-e85417dde270" },
+    { userName: "Александров Александр Сергеевич", userId: "1b88f4fb-7757-55ii-f266-f96528eef381" },
+    { userName: "Алексеев Алексей Михайлович", userId: "2c99g5gc-8868-66jj-g377-ga7639ffg492" },
+    { userName: "Андреев Андрей Николаевич", userId: "3daa06hd-9979-77kk-h488-hb8740ggh5a3" },
+    { userName: "Анна Сергеевна Петрова", userId: "4ebb17ie-aa8a-88ll-i599-ic9851hhi6b4" },
+    { userName: "Антонов Антон Дмитриевич", userId: "5fcc28jf-bb9b-99mm-j6aa-jda962iij7c5" },
+    { userName: "Владимиров Владимир Александрович", userId: "6gdd39kg-ccac-aann-k7bb-keb073jjk8d6" },
+    { userName: "Дмитриев Дмитрий Владимирович", userId: "7hee4alh-ddbd-bboo-l8cc-lfc184kkl9e7" },
+    { userName: "Евгеньев Евгений Андреевич", userId: "8iff5bmi-eece-ccpp-m9dd-mgd295llmaf8" },
+    { userName: "Елена Дмитриевна Сидорова", userId: "9jgg6cnj-ffdf-ddqq-naee-nhe3a6mmnbg9" },
+    { userName: "Кириллов Кирилл Евгеньевич", userId: "akhhd7ok-ggeg-eerr-obff-oif4b7nnocah" },
+    { userName: "Максимов Максим Кириллович", userId: "blii8epl-hhfh-ffss-pcgg-pjg5c8oopdbi" },
+    { userName: "Михайлов Михаил Максимович", userId: "cmjj9fqm-iigi-ggtt-qdhh-qkh6d9ppqecj" },
+    { userName: "Наталья Михайловна Козлова", userId: "dnkka0grn-jjhj-hhuu-reii-rli7eaqqrfdk" },
+    { userName: "Николаев Николай Натальевич", userId: "eollb1hso-kkik-iivv-sfjj-smj8fbrrsgel" },
+    { userName: "Ольга Николаевна Морозова", userId: "fpmmcit2p-lljl-jjww-tgkk-tnk9gcssthfm" },
+    { userName: "Павлов Павел Ольгович", userId: "gqnndju3q-mmkm-kkxx-uhll-uol0hdttugn" },
+    { userName: "Сергеев Сергей Павлович", userId: "hrooekvr4-nnln-llyy-vimm-vpm1ieuuvho" },
+    { userName: "Татьяна Сергеевна Волкова", userId: "ispplws5s-oomm-mmzz-wjnn-wqn2jfvvwip" }
   ];
 
   private projects: IProject[] = [
     { name: "АйТи План - Подбор и развитие компетенций персонала", id: "745bb100-bedf-11ef-b92a-f86c91893b43" },
-    { name: "Telegram Bot - Система документооборота", id: "856cc211-cfea-22fa-c93b-a97d94bba554" },
-    { name: "АСКОНА ТД - Исправление характеристик в документах", id: "967dd322-daeb-33ab-da4c-ba8e05ccb665" },
-    { name: "Развитие программистов - Освоение новых технологий", id: "a78ee433-ebfc-44bc-eb5d-cb9f16ddc776" }
+    { name: "АйТи План - Развитие программистов", id: "fed7b717-7cc6-11ef-b929-d4b632d8a8a3" },
+    { name: "АСКОНА ТД (Аскона Хоум)", id: "967dd322-daeb-33ab-da4c-ba8e05ccb665" },
+    { name: "WorkMetricsAI - Telegram Bot для документооборота", id: "856cc211-cfea-22fa-c93b-a97d94bba554" },
+    { name: "Система управления проектами", id: "a78ee433-ebfc-44bc-eb5d-cb9f16ddc776" },
+    { name: "Автоматизация бизнес-процессов", id: "b89ff544-fcad-55cd-fc6e-dc0a27eee887" },
+    { name: "Интеграция внешних систем", id: "c9a006655-adbe-66de-ad7f-ed1b38fff998" },
+    { name: "Разработка мобильных приложений", id: "da1117766-becf-77ef-be80-fe2c49000aa9" }
   ];
 
   private workTypes: IWorkType[] = [
@@ -47,27 +69,52 @@ export class MockDocumentAPI implements ILegacyDocumentAPI {
     {
       name: "АйТи План - Развитие программистов - Освоение GIT",
       id: "df82c5fd-7cc7-11ef-b929-d4b632d8a8a3",
-      deadline: "20250730235959"
+      deadline: "20241227235959"
     },
     {
-      name: "Telegram Bot - Разработка парсера естественного языка",
-      id: "ef93d6fe-8dd8-22fa-ca3a-e5c743e9b4b4",
-      deadline: "20250630235959"
-    },
-    {
-      name: "АСКОНА ТД - Исправление чужой характеристики в документах",
+      name: "АСКОНА ТД (Аскона Хоум) - Исправление чужой характеристики в документах",
       id: "fa052f4e-a645-11ef-b929-d4b632d8a8a3",
-      deadline: "20250715235959"
+      deadline: "20241215235959"
     },
     {
       name: "АйТи План - Ознакомление с новостями",
       id: "745bb100-bedf-11ef-b92a-f86c91893b43",
-      deadline: "20250705235959"
+      deadline: "20241221235959"
     },
     {
-      name: "Telegram Bot - Интеграция с Gemini API",
+      name: "WorkMetricsAI - Разработка Telegram бота для документооборота",
+      id: "ef93d6fe-8dd8-22fa-ca3a-e5c743e9b4b4",
+      deadline: "20250115235959"
+    },
+    {
+      name: "WorkMetricsAI - Интеграция с Gemini API",
       id: "0b14e5ff-9ee9-33ab-db4b-f6d854fac5c5",
-      deadline: "20250628235959"
+      deadline: "20250110235959"
+    },
+    {
+      name: "WorkMetricsAI - Разработка парсера естественного языка",
+      id: "1c25f600-aff0-44bc-ec5c-g7e965gad6d6",
+      deadline: "20250105235959"
+    },
+    {
+      name: "Система управления проектами - Анализ требований",
+      id: "2d36g711-b001-55cd-fd6d-h8fa76hbe7e7",
+      deadline: "20250120235959"
+    },
+    {
+      name: "Автоматизация бизнес-процессов - Проектирование архитектуры",
+      id: "3e47h822-c112-66de-ge7e-i90b87icf8f8",
+      deadline: "20250125235959"
+    },
+    {
+      name: "Интеграция внешних систем - Разработка API",
+      id: "4f58i933-d223-77ef-hf8f-ja1c98jdg9g9",
+      deadline: "20250130235959"
+    },
+    {
+      name: "Разработка мобильных приложений - UI/UX дизайн",
+      id: "5069ja44-e334-88f0-ig90-kb2da9keh0ha",
+      deadline: "20250201235959"
     }
   ];
 
@@ -167,12 +214,44 @@ export class MockDocumentAPI implements ILegacyDocumentAPI {
 
     const allTimeData: IUserStuffTime[] = [
       {
-        user: "Артем Разработчик",
+        user: "Золотарев Сергей Александрович",
+        countOfMinutes: 330,
+        stufftime: [
+          {
+            description: "Созвон с Кириллом и Наталией. Обсуждение проекта по взаимодействию Яндекс станции с ДО",
+            countOfMinutes: 150
+          },
+          {
+            description: "Разработка http-сервиса в базе разработки ДО для организации API с навыком Яндекс станции.",
+            countOfMinutes: 180
+          }
+        ]
+      },
+      {
+        user: "Червоткин Кирилл Сергеевич",
+        countOfMinutes: 300,
+        stufftime: [
+          {
+            description: "Общение с Сергеем по задаче",
+            countOfMinutes: 60
+          },
+          {
+            description: "Доработка алгоритма. ( Сделана доработка обработки ошибок при отправки http запросов)",
+            countOfMinutes: 120
+          },
+          {
+            description: "Разворачивание на сервере (Упаковка в докер контейнер, запуск и настройка на стороне сервера)",
+            countOfMinutes: 120
+          }
+        ]
+      },
+      {
+        user: "Артемов Артем Владимирович",
         countOfMinutes: 480,
         stufftime: [
           {
             description: "Разработка Telegram-бота документооборота с интеграцией Gemini AI",
-            countOfMinutes: 180
+            countOfMinutes: 240
           },
           {
             description: "Настройка IoC контейнера и создание mock реализации API",
@@ -180,46 +259,6 @@ export class MockDocumentAPI implements ILegacyDocumentAPI {
           },
           {
             description: "Интеграция с OpenRouter для доступа к Gemini 2.5 Flash Lite",
-            countOfMinutes: 90
-          },
-          {
-            description: "Создание универсального парсера запросов пользователей",
-            countOfMinutes: 90
-          }
-        ]
-      },
-      {
-        user: "Червоткин Кирилл Сергеевич",
-        countOfMinutes: 360,
-        stufftime: [
-          {
-            description: "Код-ревью и тестирование новых функций бота",
-            countOfMinutes: 150
-          },
-          {
-            description: "Документирование API и создание примеров использования",
-            countOfMinutes: 120
-          },
-          {
-            description: "Анализ производительности и оптимизация запросов",
-            countOfMinutes: 90
-          }
-        ]
-      },
-      {
-        user: "Золотарев Сергей Александрович",
-        countOfMinutes: 420,
-        stufftime: [
-          {
-            description: "Архитектурное планирование системы документооборота",
-            countOfMinutes: 180
-          },
-          {
-            description: "Встреча с командой по техническим требованиям",
-            countOfMinutes: 120
-          },
-          {
-            description: "Административные работы и планирование спринта",
             countOfMinutes: 120
           }
         ]

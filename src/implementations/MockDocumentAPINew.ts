@@ -51,6 +51,33 @@ export class MockDocumentAPINew implements IDocumentAPI {
     }
   }
 
+  async getAllUsers(): Promise<APIResponse<User[]>> {
+    try {
+      console.log('🔍 Mock: Получение всех пользователей');
+
+      const allUsers = await this.mockAPI.getUsersByNames('');
+      const users: User[] = allUsers.map(user => ({
+        userName: user.userName,
+        userId: user.userId
+      }));
+
+      console.log(`✅ Mock: Найдено всех пользователей: ${users.length}`);
+      return {
+        success: true,
+        data: users,
+        message: `Найдено пользователей: ${users.length}`
+      };
+
+    } catch (error: any) {
+      console.error('❌ Mock API Error (getAllUsers):', error.message);
+      return {
+        success: false,
+        data: [],
+        message: `Ошибка Mock API: ${error.message}`
+      };
+    }
+  }
+
   async getEmployeeTasks(params: { employee_name?: string; userId?: string; limit?: number }): Promise<APIResponse<Task[]>> {
     try {
       console.log(`📋 Mock: Получение задач для ${params.employee_name || params.userId}`);

@@ -26,33 +26,68 @@ export class SimpleDocumentAPIAdapter {
 
   async getAllEmployees(): Promise<ApiResponse<Employee[]>> {
     try {
-      // Пробуем разные стратегии поиска пользователей
-      let allUsers: any[] = [];
+      console.log('👥 Попытка получить всех сотрудников...');
 
-      // Стратегия 1: Поиск по популярным буквам русского алфавита
-      const russianLetters = ["А", "Б", "В", "Г", "Д", "Е", "И", "К", "Л", "М", "Н", "О", "П", "Р", "С", "Т"];
-
-      for (const letter of russianLetters) {
+      // Стратегия 1: Используем новый метод getAllUsers если доступен
+      if ('getAllUsers' in this.api && typeof this.api.getAllUsers === 'function') {
         try {
-          const response = await this.api.getUsersByNames({ names: [letter] });
+          console.log('🔍 Пробуем получить всех пользователей через getAllUsers...');
+          const response = await this.api.getAllUsers();
           if (response.success && response.data.length > 0) {
-            allUsers.push(...response.data);
-            // Если нашли достаточно пользователей, прекращаем поиск
-            if (allUsers.length >= 50) break;
+            console.log(`✅ Получено пользователей через getAllUsers: ${response.data.length}`);
+            return this.formatEmployeesResponse(response.data);
           }
         } catch (error) {
-          // Игнорируем ошибки отдельных запросов
+          console.log('❌ Не удалось получить пользователей через getAllUsers');
+        }
+      }
+
+      // Стратегия 2: Попробуем получить пользователей с пустым запросом
+      try {
+        console.log('🔍 Пробуем получить всех пользователей с пустым запросом...');
+        const response = await this.api.getUsersByNames({ names: [""] });
+        if (response.success && response.data.length > 0) {
+          console.log(`✅ Получено пользователей с пустым запросом: ${response.data.length}`);
+          return this.formatEmployeesResponse(response.data);
+        }
+      } catch (error) {
+        console.log('❌ Не удалось получить пользователей с пустым запросом');
+      }
+
+      // Стратегия 2: Попробуем с общими символами
+      const commonChars = [" ", "*", "%", "а", "е", "и", "о", "у"];
+      let allUsers: any[] = [];
+
+      for (const char of commonChars) {
+        try {
+          console.log(`🔍 Пробуем поиск по символу: "${char}"`);
+          const response = await this.api.getUsersByNames({ names: [char] });
+          if (response.success && response.data.length > 0) {
+            console.log(`✅ Найдено пользователей по "${char}": ${response.data.length}`);
+            allUsers.push(...response.data);
+            if (allUsers.length >= 100) break; // Ограничиваем количество
+          }
+        } catch (error) {
+          console.log(`❌ Ошибка поиска по "${char}"`);
           continue;
         }
       }
 
-      // Стратегия 2: Если мало пользователей, пробуем английские буквы
-      if (allUsers.length < 10) {
-        const englishLetters = ["A", "B", "C", "D", "E", "I", "J", "K", "M", "P", "S", "T"];
-        for (const letter of englishLetters) {
+      // Стратегия 3: Если ничего не нашли, попробуем популярные имена
+      if (allUsers.length === 0) {
+        const popularNames = [
+          "Александр", "Алексей", "Андрей", "Анна", "Антон",
+          "Владимир", "Дмитрий", "Евгений", "Елена", "Иван",
+          "Кирилл", "Максим", "Мария", "Михаил", "Наталья",
+          "Николай", "Ольга", "Павел", "Сергей", "Татьяна"
+        ];
+
+        for (const name of popularNames) {
           try {
-            const response = await this.api.getUsersByNames({ names: [letter] });
+            console.log(`🔍 Пробуем поиск по имени: ${name}`);
+            const response = await this.api.getUsersByNames({ names: [name] });
             if (response.success && response.data.length > 0) {
+              console.log(`✅ Найдено пользователей по имени "${name}": ${response.data.length}`);
               allUsers.push(...response.data);
               if (allUsers.length >= 50) break;
             }
@@ -63,38 +98,45 @@ export class SimpleDocumentAPIAdapter {
       }
 
       if (allUsers.length > 0) {
-        // Убираем дубликаты по userId
-        const uniqueUsers = allUsers.filter((user, index, self) =>
-          index === self.findIndex(u => u.userId === user.userId)
-        );
-
-        const employees: Employee[] = uniqueUsers.map(user => ({
-          id: user.userId,
-          name: user.userName,
-          email: "",
-          position: "Сотрудник",
-          department: "Неизвестно"
-        }));
-        
-        return {
-          success: true,
-          data: employees,
-          message: `Найдено сотрудников: ${employees.length}`
-        };
+        return this.formatEmployeesResponse(allUsers);
       } else {
+        console.log('❌ Не удалось найти пользователей ни одним способом');
         return {
           success: false,
           data: [],
-          message: "Не удалось получить пользователей"
+          message: "Не удалось получить пользователей из API"
         };
       }
     } catch (error: any) {
+      console.error('❌ Критическая ошибка при получении сотрудников:', error.message);
       return {
         success: false,
         data: [],
         message: `Ошибка получения сотрудников: ${error.message}`
       };
     }
+  }
+
+  private formatEmployeesResponse(users: any[]): ApiResponse<Employee[]> {
+    // Убираем дубликаты по userId
+    const uniqueUsers = users.filter((user, index, self) =>
+      index === self.findIndex(u => u.userId === user.userId)
+    );
+
+    const employees: Employee[] = uniqueUsers.map(user => ({
+      id: user.userId,
+      name: user.userName,
+      email: "",
+      position: "Сотрудник",
+      department: "Неизвестно"
+    }));
+
+    console.log(`✅ Обработано уникальных сотрудников: ${employees.length}`);
+    return {
+      success: true,
+      data: employees,
+      message: `Найдено сотрудников: ${employees.length}`
+    };
   }
 
   async getEmployeeTasks(params: { employee_name?: string; limit?: number }): Promise<ApiResponse<Task[]>> {

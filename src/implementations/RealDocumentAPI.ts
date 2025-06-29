@@ -57,7 +57,7 @@ export class RealDocumentAPI implements IDocumentAPI {
 
       const response: AxiosResponse = await this.client.get('/users', {
         params: {
-          names: params.names.join(',')
+          users: params.names.join(',')  // Исправлено: используем 'users' вместо 'names'
         }
       });
 
@@ -88,6 +88,54 @@ export class RealDocumentAPI implements IDocumentAPI {
         data: [],
         message: `Ошибка API: ${error.message}`,
         error: error.response?.data || error.message
+      };
+    }
+  }
+
+  async getAllUsers(): Promise<APIResponse<User[]>> {
+    try {
+      console.log('🔍 Real API: Получение всех пользователей через /tasks');
+
+      // Используем endpoint /tasks без userId для получения всех задач,
+      // из которых можем извлечь пользователей
+      const response: AxiosResponse = await this.client.get('/tasks');
+
+      if (response.status === 200 && response.data) {
+        const tasks = Array.isArray(response.data) ? response.data : [];
+
+        // Извлекаем уникальных пользователей из задач
+        const userIds = new Set<string>();
+        const users: User[] = [];
+
+        tasks.forEach((task: any) => {
+          if (task.userId && !userIds.has(task.userId)) {
+            userIds.add(task.userId);
+            users.push({
+              userName: task.userName || `Пользователь ${task.userId}`,
+              userId: task.userId
+            });
+          }
+        });
+
+        console.log(`✅ Real API: Найдено уникальных пользователей: ${users.length}`);
+        return {
+          success: true,
+          data: users,
+          message: `Найдено пользователей: ${users.length}`
+        };
+      }
+
+      return {
+        success: false,
+        data: [],
+        message: 'Не удалось получить данные'
+      };
+    } catch (error: any) {
+      console.error('❌ Real API Error (getAllUsers):', error.message);
+      return {
+        success: false,
+        data: [],
+        message: `Ошибка Real API: ${error.message}`
       };
     }
   }
