@@ -160,7 +160,80 @@ export class DataProcessor {
 
   private extractTimeframe(query: string) {
     const today = new Date();
+    console.log('🔍 Анализируем временной период в запросе:', query);
 
+    // Извлекаем год из запроса
+    const yearMatch = query.match(/(\d{4})\s*год/);
+    const year = yearMatch ? parseInt(yearMatch[1]) : null;
+    console.log('📅 Найден год:', year);
+
+    // Извлекаем месяц из запроса
+    const monthNames = {
+      'январ': 0, 'янв': 0,
+      'феврал': 1, 'фев': 1,
+      'март': 2, 'мар': 2,
+      'апрел': 3, 'апр': 3,
+      'май': 4, 'мая': 4,
+      'июн': 5, 'июня': 5,
+      'июл': 6, 'июля': 6,
+      'август': 7, 'авг': 7,
+      'сентябр': 8, 'сен': 8,
+      'октябр': 9, 'окт': 9,
+      'ноябр': 10, 'ноя': 10,
+      'декабр': 11, 'дек': 11
+    };
+
+    let month = null;
+    let monthName = '';
+    for (const [name, index] of Object.entries(monthNames)) {
+      if (query.includes(name)) {
+        month = index;
+        monthName = name;
+        break;
+      }
+    }
+    console.log('📅 Найден месяц:', monthName, '→', month);
+
+    // Если найден конкретный месяц и год
+    if (month !== null && year !== null) {
+      const startDate = new Date(year, month, 1);
+      const endDate = new Date(year, month + 1, 0); // Последний день месяца
+
+      console.log('✅ Период:', startDate.toISOString().split('T')[0], '→', endDate.toISOString().split('T')[0]);
+
+      return {
+        start: startDate.toISOString().split('T')[0],
+        end: endDate.toISOString().split('T')[0],
+        label: `${monthName} ${year} года`
+      };
+    }
+
+    // Если найден только месяц (текущий год)
+    if (month !== null) {
+      const currentYear = today.getFullYear();
+      const startDate = new Date(currentYear, month, 1);
+      const endDate = new Date(currentYear, month + 1, 0);
+
+      return {
+        start: startDate.toISOString().split('T')[0],
+        end: endDate.toISOString().split('T')[0],
+        label: `${monthName} ${currentYear} года`
+      };
+    }
+
+    // Если найден только год
+    if (year !== null) {
+      const startDate = new Date(year, 0, 1);
+      const endDate = new Date(year, 11, 31);
+
+      return {
+        start: startDate.toISOString().split('T')[0],
+        end: endDate.toISOString().split('T')[0],
+        label: `${year} год`
+      };
+    }
+
+    // Стандартные периоды
     if (query.includes('вчера')) {
       const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
       return {
@@ -198,6 +271,7 @@ export class DataProcessor {
 
     // По умолчанию - ВСЕ доступные данные (за последний год)
     const yearAgo = new Date(today.getTime() - 365 * 24 * 60 * 60 * 1000);
+    console.log('⚠️ Используем период по умолчанию');
     return {
       start: yearAgo.toISOString().split('T')[0],
       end: today.toISOString().split('T')[0],
