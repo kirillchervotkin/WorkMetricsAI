@@ -26,9 +26,49 @@ export class SimpleDocumentAPIAdapter {
 
   async getAllEmployees(): Promise<ApiResponse<Employee[]>> {
     try {
-      const response = await this.api.getUsersByNames({ names: [""] });
-      if (response.success) {
-        const employees: Employee[] = response.data.map(user => ({
+      // Пробуем разные стратегии поиска пользователей
+      let allUsers: any[] = [];
+
+      // Стратегия 1: Поиск по популярным буквам русского алфавита
+      const russianLetters = ["А", "Б", "В", "Г", "Д", "Е", "И", "К", "Л", "М", "Н", "О", "П", "Р", "С", "Т"];
+
+      for (const letter of russianLetters) {
+        try {
+          const response = await this.api.getUsersByNames({ names: [letter] });
+          if (response.success && response.data.length > 0) {
+            allUsers.push(...response.data);
+            // Если нашли достаточно пользователей, прекращаем поиск
+            if (allUsers.length >= 50) break;
+          }
+        } catch (error) {
+          // Игнорируем ошибки отдельных запросов
+          continue;
+        }
+      }
+
+      // Стратегия 2: Если мало пользователей, пробуем английские буквы
+      if (allUsers.length < 10) {
+        const englishLetters = ["A", "B", "C", "D", "E", "I", "J", "K", "M", "P", "S", "T"];
+        for (const letter of englishLetters) {
+          try {
+            const response = await this.api.getUsersByNames({ names: [letter] });
+            if (response.success && response.data.length > 0) {
+              allUsers.push(...response.data);
+              if (allUsers.length >= 50) break;
+            }
+          } catch (error) {
+            continue;
+          }
+        }
+      }
+
+      if (allUsers.length > 0) {
+        // Убираем дубликаты по userId
+        const uniqueUsers = allUsers.filter((user, index, self) =>
+          index === self.findIndex(u => u.userId === user.userId)
+        );
+
+        const employees: Employee[] = uniqueUsers.map(user => ({
           id: user.userId,
           name: user.userName,
           email: "",
@@ -45,7 +85,7 @@ export class SimpleDocumentAPIAdapter {
         return {
           success: false,
           data: [],
-          message: response.message
+          message: "Не удалось получить пользователей"
         };
       }
     } catch (error: any) {
@@ -59,11 +99,23 @@ export class SimpleDocumentAPIAdapter {
 
   async getEmployeeTasks(params: { employee_name?: string; limit?: number }): Promise<ApiResponse<Task[]>> {
     try {
+      // Если указано имя сотрудника, сначала найдем его точный ID
+      let employeeName = params.employee_name;
+
+      if (employeeName) {
+        // Ищем пользователя по частичному совпадению имени
+        const userResponse = await this.findUserByName(employeeName);
+        if (userResponse.success && userResponse.data.length > 0) {
+          // Используем точное имя из API
+          employeeName = userResponse.data[0].name;
+        }
+      }
+
       const response = await this.api.getEmployeeTasks({
-        employee_name: params.employee_name,
+        employee_name: employeeName,
         limit: params.limit
       });
-      
+
       if (response.success) {
         const tasks: Task[] = response.data.map(task => ({
           id: task.id,
@@ -75,7 +127,7 @@ export class SimpleDocumentAPIAdapter {
           date: task.date,
           status: task.status as any || "pending"
         }));
-        
+
         return {
           success: true,
           data: tasks,
@@ -97,15 +149,84 @@ export class SimpleDocumentAPIAdapter {
     }
   }
 
-  async getTimeEntries(params: { 
-    employee_name?: string; 
-    start_date?: string; 
-    end_date?: string; 
-    limit?: number 
+  // Вспомогательный метод для поиска пользователя по имени
+  private async findUserByName(searchName: string): Promise<ApiResponse<Employee[]>> {
+    try {
+      // Пробуем разные варианты поиска
+      const searchVariants = [
+        searchName, // Полное имя как есть
+        searchName.charAt(0).toUpperCase() + searchName.slice(1).toLowerCase(), // Первая буква заглавная
+        searchName.toUpperCase(), // Все заглавные
+        searchName.toLowerCase(), // Все строчные
+        searchName.split(' ')[0], // Только первое слово (имя)
+        searchName.split(' ').pop() || searchName // Только последнее слово (фамилия)
+      ];
+
+      for (const variant of searchVariants) {
+        try {
+          const response = await this.api.getUsersByNames({ names: [variant] });
+          if (response.success && response.data.length > 0) {
+            // Фильтруем результаты по частичному совпадению
+            const matchingUsers = response.data.filter(user =>
+              user.userName.toLowerCase().includes(searchName.toLowerCase()) ||
+              searchName.toLowerCase().includes(user.userName.toLowerCase())
+            );
+
+            if (matchingUsers.length > 0) {
+              const employees: Employee[] = matchingUsers.map(user => ({
+                id: user.userId,
+                name: user.userName,
+                email: "",
+                position: "Сотрудник",
+                department: "Неизвестно"
+              }));
+
+              return {
+                success: true,
+                data: employees,
+                message: `Найдено пользователей: ${employees.length}`
+              };
+            }
+          }
+        } catch (error) {
+          // Игнорируем ошибки отдельных вариантов поиска
+          continue;
+        }
+      }
+
+      return {
+        success: false,
+        data: [],
+        message: `Пользователь "${searchName}" не найден`
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: [],
+        message: `Ошибка поиска пользователя: ${error.message}`
+      };
+    }
+  }
+
+  async getTimeEntries(params: {
+    employee_name?: string;
+    start_date?: string;
+    end_date?: string;
+    limit?: number
   }): Promise<ApiResponse<TimeEntry[]>> {
     try {
+      // Если указано имя сотрудника, найдем его точное имя
+      let employeeName = params.employee_name;
+
+      if (employeeName) {
+        const userResponse = await this.findUserByName(employeeName);
+        if (userResponse.success && userResponse.data.length > 0) {
+          employeeName = userResponse.data[0].name;
+        }
+      }
+
       const response = await this.api.getTimeEntries({
-        employee_name: params.employee_name,
+        employee_name: employeeName,
         startDate: params.start_date,
         endDate: params.end_date,
         limit: params.limit
@@ -183,24 +304,36 @@ export class SimpleDocumentAPIAdapter {
     }
   }
 
-  async loadAllData(params: { 
-    start_date?: string; 
-    end_date?: string; 
-    employee_name?: string 
+  async loadAllData(params: {
+    start_date?: string;
+    end_date?: string;
+    employee_name?: string
   } = {}) {
     try {
-      console.log('🔄 Загружаем все данные из ДО...');
-      
+      console.log('🔄 Загружаем релевантные данные из ДО...');
+
+      // Устанавливаем разумные лимиты для LLM
+      const TASK_LIMIT = 50;  // Максимум 50 задач
+      const TIME_LIMIT = 100; // Максимум 100 записей времени
+
+      // Устанавливаем временной диапазон по умолчанию (последние 30 дней)
+      const defaultEndDate = new Date().toISOString().split('T')[0];
+      const defaultStartDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
       const [workTypes, employees, tasks, timeEntries, projects] = await Promise.all([
         this.getWorkTypes(),
         this.getAllEmployees(),
-        this.getEmployeeTasks({ employee_name: params.employee_name }),
-        this.getTimeEntries({ 
+        this.getEmployeeTasks({
           employee_name: params.employee_name,
-          start_date: params.start_date,
-          end_date: params.end_date
+          limit: TASK_LIMIT
         }),
-        this.getProjects({})
+        this.getTimeEntries({
+          employee_name: params.employee_name,
+          start_date: params.start_date || defaultStartDate,
+          end_date: params.end_date || defaultEndDate,
+          limit: TIME_LIMIT
+        }),
+        this.getProjects({ limit: 20 })
       ]);
 
       const result = {
