@@ -92,14 +92,38 @@ export class DataProcessor {
 
   private analyzeQuery(query: string, employees: any[]) {
     const queryLower = query.toLowerCase();
+    console.log('🔍 Анализируем запрос:', queryLower);
 
-    return {
+    // Определяем основной тип запроса
+    const queryIntent = this.detectQueryIntent(queryLower);
+
+    const context = {
       employeeName: this.extractEmployeeName(queryLower, employees),
       timeframe: this.extractTimeframe(queryLower),
       queryType: this.detectQueryType(queryLower),
+      queryIntent: queryIntent,
       needsDetailed: queryLower.includes('подробно') || queryLower.includes('детально'),
-      needsStats: queryLower.includes('статистика') || queryLower.includes('сколько') || queryLower.includes('количество')
+      needsStats: queryLower.includes('статистика') || queryLower.includes('сколько') || queryLower.includes('количество'),
+      needsTasks: this.needsTasks(queryLower, queryIntent),
+      needsTimeEntries: this.needsTimeEntries(queryLower, queryIntent),
+      needsProjects: this.needsProjects(queryLower, queryIntent),
+      needsOverdue: this.needsOverdue(queryLower, queryIntent),
+      needsUserList: this.needsUserList(queryLower, queryIntent),
+      employees: employees,
+      isSpecificQuery: this.isSpecificQuery(queryLower)
     };
+
+    console.log('📋 Определены потребности в данных:', {
+      intent: context.queryIntent,
+      userList: context.needsUserList,
+      tasks: context.needsTasks,
+      timeEntries: context.needsTimeEntries,
+      projects: context.needsProjects,
+      overdue: context.needsOverdue,
+      specific: context.isSpecificQuery
+    });
+
+    return context;
   }
 
   private extractEmployeeName(query: string, employees: any[]): string | undefined {
@@ -285,30 +309,273 @@ export class DataProcessor {
     if (query.includes('задач') || query.includes('задачи')) return 'tasks';
     if (query.includes('время') || query.includes('часов')) return 'time';
     if (query.includes('проект') || query.includes('проекты')) return 'projects';
+    if (query.includes('просрочен') || query.includes('просрочка')) return 'overdue';
     return 'general';
   }
 
+  private detectQueryIntent(query: string): string {
+    // Определяем основное намерение запроса
+    if (query.includes('список пользователей') || query.includes('все пользователи') ||
+        (query.includes('пользователи') && !query.includes('что делал'))) return 'user_list';
+
+    if (query.includes('список задач') || query.includes('все задачи') ||
+        (query.includes('задачи') && !query.includes('что делал'))) return 'task_list';
+
+    if (query.includes('конкретная задача') || query.includes('задача ') ||
+        query.includes('найди задачу')) return 'specific_task';
+
+    if (query.includes('трудозатраты') || query.includes('время') ||
+        query.includes('часов') || query.includes('отработал')) return 'time_entries';
+
+    if (query.includes('просрочен') || query.includes('просрочка') ||
+        query.includes('дедлайн')) return 'overdue_check';
+
+    if (query.includes('проекты') || query.includes('список проектов')) return 'project_list';
+
+    if (query.includes('что делал') || query.includes('активность') ||
+        query.includes('работал над')) return 'user_activity';
+
+    return 'general_info';
+  }
+
+  private isSpecificQuery(query: string): boolean {
+    // Определяем, является ли запрос специфичным (требует только конкретную информацию)
+    const specificPatterns = [
+      'список пользователей', 'все пользователи', 'пользователи',
+      'список задач', 'все задачи', 'задачи',
+      'список проектов', 'все проекты', 'проекты',
+      'трудозатраты', 'время', 'часов',
+      'просрочен', 'просрочка'
+    ];
+
+    return specificPatterns.some(pattern => query.includes(pattern));
+  }
+
+  private needsUserList(query: string, intent: string): boolean {
+    return intent === 'user_list' ||
+           query.includes('список пользователей') ||
+           query.includes('все пользователи') ||
+           (query.includes('пользователи') && !query.includes('что делал'));
+  }
+
+  private needsTasks(query: string, intent: string): boolean {
+    return intent === 'task_list' || intent === 'specific_task' || intent === 'user_activity' ||
+           query.includes('задач') || query.includes('задачи') ||
+           query.includes('что делал') || query.includes('работал над') ||
+           query.includes('выполнил') || query.includes('сделал');
+  }
+
+  private needsTimeEntries(query: string, intent: string): boolean {
+    return intent === 'time_entries' || intent === 'user_activity' ||
+           query.includes('время') || query.includes('часов') ||
+           query.includes('трудозатрат') || query.includes('сколько работал') ||
+           query.includes('отработал') || query.includes('потратил');
+  }
+
+  private needsProjects(query: string, intent: string): boolean {
+    return intent === 'project_list' ||
+           query.includes('проект') || query.includes('проекты') ||
+           query.includes('проектах') || query.includes('по проекту');
+  }
+
+  private needsOverdue(query: string, intent: string): boolean {
+    return intent === 'overdue_check' ||
+           query.includes('просрочен') || query.includes('просрочка') ||
+           query.includes('дедлайн') || query.includes('опоздал') ||
+           query.includes('не успел') || query.includes('задержка');
+  }
+
   private async loadRelevantData(context: any) {
-    // Загружаем ВСЕ доступные данные без ограничений по времени
-    const limits = {
-      tasks: context.employeeName ? 1000 : 500, // Максимум данных
-      timeEntries: context.employeeName ? 2000 : 1000, // Максимум записей времени
-      projects: 100 // Все проекты
+    console.log('📥 Начинаем оптимизированную загрузку данных...');
+    console.log('🎯 Намерение запроса:', context.queryIntent);
+
+    const result: any = {
+      users: context.employees,
+      workTypes: [],
+      tasks: [],
+      timeEntries: [],
+      projects: [],
+      overdueInfo: null
     };
 
-    console.log('📥 Загружаем ВСЕ доступные данные с лимитами:', limits);
-    console.log('🔍 Запрашиваемый период для фильтрации:', context.timeframe);
+    // Загружаем только то, что действительно нужно для ответа
+    switch (context.queryIntent) {
+      case 'user_list':
+        console.log('👥 Запрос списка пользователей - данные уже загружены');
+        break;
 
-    // Загружаем данные за весь период (без фильтрации по времени)
-    const yearAgo = new Date();
-    yearAgo.setFullYear(yearAgo.getFullYear() - 2); // За 2 года
+      case 'task_list':
+        console.log('📋 Загружаем список задач...');
+        await this.loadTasks(result, context);
+        break;
 
-    return await this.adapter.loadAllData({
-      employee_name: context.employeeName,
-      start_date: yearAgo.toISOString().split('T')[0], // Загружаем за 2 года
-      end_date: new Date().toISOString().split('T')[0], // До сегодня
-      ...limits
+      case 'specific_task':
+        console.log('🔍 Поиск конкретной задачи...');
+        await this.loadTasks(result, context);
+        break;
+
+      case 'time_entries':
+        console.log('⏰ Загружаем трудозатраты...');
+        await this.loadTimeEntries(result, context);
+        break;
+
+      case 'overdue_check':
+        console.log('⚠️ Проверяем просроченные задачи...');
+        await this.loadOverdueInfo(result, context);
+        break;
+
+      case 'project_list':
+        console.log('🏗️ Загружаем список проектов...');
+        await this.loadProjects(result, context);
+        break;
+
+      case 'user_activity':
+        console.log('👤 Загружаем активность пользователя...');
+        await this.loadUserActivity(result, context);
+        break;
+
+      default:
+        console.log('📊 Загружаем общую информацию...');
+        await this.loadGeneralInfo(result, context);
+        break;
+    }
+
+    console.log('📊 Итоговая статистика загруженных данных:', {
+      users: result.users.length,
+      workTypes: result.workTypes.length,
+      tasks: result.tasks.length,
+      timeEntries: result.timeEntries.length,
+      projects: result.projects.length,
+      hasOverdueInfo: !!result.overdueInfo
     });
+
+    return result;
+  }
+
+  // Методы для загрузки конкретных типов данных
+  private async loadTasks(result: any, context: any) {
+    try {
+      const tasksResponse = await this.adapter.getEmployeeTasks({
+        employee_name: context.employeeName,
+        limit: context.employeeName ? 100 : 50
+      });
+      result.tasks = tasksResponse.success ? tasksResponse.data : [];
+      console.log(`✅ Загружено задач: ${result.tasks.length}`);
+    } catch (error) {
+      console.log('⚠️ Ошибка загрузки задач:', error);
+    }
+  }
+
+  private async loadTimeEntries(result: any, context: any) {
+    try {
+      const timeResponse = await this.adapter.getTimeEntries({
+        employee_name: context.employeeName,
+        start_date: context.timeframe.start,
+        end_date: context.timeframe.end,
+        limit: 200
+      });
+      result.timeEntries = timeResponse.success ? timeResponse.data : [];
+      console.log(`✅ Загружено записей времени: ${result.timeEntries.length}`);
+    } catch (error) {
+      console.log('⚠️ Ошибка загрузки записей времени:', error);
+    }
+  }
+
+  private async loadProjects(result: any, context: any) {
+    try {
+      const projectsResponse = await this.adapter.getProjects({ limit: 30 });
+      result.projects = projectsResponse.success ? projectsResponse.data : [];
+      console.log(`✅ Загружено проектов: ${result.projects.length}`);
+    } catch (error) {
+      console.log('⚠️ Ошибка загрузки проектов:', error);
+    }
+  }
+
+  private async loadOverdueInfo(result: any, context: any) {
+    if (context.employeeName) {
+      try {
+        const employee = context.employees.find((emp: any) =>
+          emp.name.toLowerCase().includes(context.employeeName.toLowerCase())
+        );
+
+        if (employee && employee.id) {
+          result.overdueInfo = await this.checkOverdueTasks(employee.id);
+          console.log(`✅ Проверка просрочки завершена:`, result.overdueInfo);
+        }
+      } catch (error) {
+        console.log('⚠️ Ошибка проверки просрочки:', error);
+      }
+    }
+  }
+
+  private async loadUserActivity(result: any, context: any) {
+    // Загружаем задачи и время для анализа активности
+    await this.loadTasks(result, context);
+    await this.loadTimeEntries(result, context);
+  }
+
+  private async loadGeneralInfo(result: any, context: any) {
+    // Загружаем минимальный набор данных для общих запросов
+    try {
+      result.workTypes = await this.adapter.getWorkTypes();
+      console.log(`✅ Загружено типов работ: ${result.workTypes.length}`);
+    } catch (error) {
+      console.log('⚠️ Ошибка загрузки типов работ:', error);
+    }
+  }
+
+  private async checkOverdueTasks(userId: string) {
+    console.log(`⚠️ Проверяем просроченные задачи для пользователя: ${userId}`);
+
+    try {
+      // Пытаемся использовать legacy API для проверки просрочки
+      const api = this.adapter as any;
+
+      if (api.api && typeof api.api.checkOverdueTasks === 'function') {
+        const result = await api.api.checkOverdueTasks(userId);
+        return {
+          hasOverdue: result.result || false,
+          details: result.result ? 'Найдены просроченные задачи' : 'Просроченных задач нет'
+        };
+      } else {
+        // Fallback: анализируем задачи на просрочку
+        console.log('📋 Legacy API недоступен, анализируем задачи на просрочку...');
+        const employee = this.findEmployeeName(userId, []);
+        const tasksResponse = await this.adapter.getEmployeeTasks({
+          employee_name: employee || undefined,
+          limit: 100
+        });
+
+        if (tasksResponse.success) {
+          const today = new Date();
+          const overdueTasks = tasksResponse.data.filter((task: any) => {
+            if (task.date && task.status !== 'completed') {
+              const taskDate = new Date(task.date);
+              return taskDate < today;
+            }
+            return false;
+          });
+
+          return {
+            hasOverdue: overdueTasks.length > 0,
+            details: overdueTasks.length > 0
+              ? `Найдено ${overdueTasks.length} просроченных задач`
+              : 'Просроченных задач нет'
+          };
+        }
+      }
+
+      return {
+        hasOverdue: false,
+        details: 'Не удалось проверить просрочку'
+      };
+    } catch (error) {
+      console.log('❌ Ошибка проверки просрочки:', error);
+      return {
+        hasOverdue: false,
+        details: 'Ошибка при проверке просрочки'
+      };
+    }
   }
 
   private aggregateData(rawData: any, context: any): ProcessedData {
