@@ -1,5 +1,5 @@
 import { Context } from "grammy";
-import { documentAPI } from "../api/document-api";
+import { SimpleDocumentAPIAdapter } from "../adapters/SimpleDocumentAPIAdapter";
 import { geminiService } from "../services/gemini";
 
 /**
@@ -40,64 +40,8 @@ export async function handleQuery(ctx: Context) {
  * Получает ВСЕ данные из системы документооборота
  */
 async function getAllDataFromDO() {
-  console.log("🔄 Загружаем все данные из ДО...");
-  
-  // Пользователи (из документации)
-  const users = [
-    { name: "Золотарев Сергей Александрович", id: "5d99b0f7-6675-11ee-b922-b52194aab495" },
-    { name: "Червоткин Кирилл Сергеевич", id: "7d44b0f7-3313-11ee-b922-b52194aab947" },
-    { name: "Артем Разработчик", id: "8e55c1f8-4424-22ff-c933-c63295bbc058" },
-    { name: "Мария Тестировщик", id: "9f66d2f9-5535-33gg-d044-d74306ccd169" },
-    { name: "Иван Аналитик", id: "0a77e3fa-6646-44hh-e155-e85417dde270" }
-  ];
-
-  // Проекты
-  const projectsResult = await documentAPI.getProjects();
-  const projects = projectsResult.success ? projectsResult.data : [];
-
-  // Виды работ
-  const workTypes = await documentAPI.getWorkTypes();
-
-  // Задачи всех пользователей
-  const allTasks = [];
-  for (const user of users) {
-    const tasksResult = await documentAPI.getEmployeeTasks({
-      employee_name: user.name,
-      limit: 10
-    });
-    if (tasksResult.success) {
-      allTasks.push(...tasksResult.data.map(task => ({
-        ...task,
-        employee_name: user.name,
-        employee_id: user.id
-      })));
-    }
-  }
-
-  // Трудозатраты за последний месяц
-  const endDate = new Date().toISOString().split('T')[0];
-  const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-  
-  const allTimeEntries = [];
-  for (const user of users) {
-    const timeResult = await documentAPI.getTimeReport({
-      employee_name: user.name,
-      start_date: startDate,
-      end_date: endDate
-    });
-    if (timeResult.success) {
-      allTimeEntries.push(...timeResult.data);
-    }
-  }
-
-  return {
-    users,
-    projects,
-    workTypes,
-    tasks: allTasks,
-    timeEntries: allTimeEntries,
-    dateRange: { startDate, endDate }
-  };
+  const adapter = new SimpleDocumentAPIAdapter();
+  return await adapter.loadAllData();
 }
 
 /**

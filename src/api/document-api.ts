@@ -1,11 +1,11 @@
-import { DocumentAPIAdapter } from "../adapters/DocumentAPIAdapter";
+import { SimpleDocumentAPIAdapter } from "../adapters/SimpleDocumentAPIAdapter";
 import { ApiResponse, Employee, Project, Task, TimeEntry } from "../types";
 
 export class DocumentAPI {
-  private adapter: DocumentAPIAdapter;
+  private adapter: SimpleDocumentAPIAdapter;
 
   constructor() {
-    this.adapter = new DocumentAPIAdapter();
+    this.adapter = new SimpleDocumentAPIAdapter();
     console.log("📡 DocumentAPI initialized with IoC adapter");
   }
 
@@ -19,12 +19,12 @@ export class DocumentAPI {
     return await this.adapter.getEmployeeTasks(params);
   }
 
-  async getProjects(activeOnly: boolean = true): Promise<ApiResponse<Project[]>> {
-    return await this.adapter.getProjects(activeOnly);
+  async getProjects(_activeOnly: boolean = true): Promise<ApiResponse<Project[]>> {
+    return await this.adapter.getProjects({});
   }
 
   async getEmployees(): Promise<ApiResponse<Employee[]>> {
-    return await this.adapter.getEmployees();
+    return await this.adapter.getAllEmployees();
   }
 
   async getTimeReport(params: {
@@ -33,11 +33,16 @@ export class DocumentAPI {
     start_date: string;
     end_date: string;
   }): Promise<ApiResponse<TimeEntry[]>> {
-    return await this.adapter.getTimeReport(params);
+    return await this.adapter.getTimeEntries({
+      employee_name: params.employee_name,
+      start_date: params.start_date,
+      end_date: params.end_date
+    });
   }
 
   async findProjectByName(projectName: string): Promise<Project | null> {
-    return await this.adapter.findProjectByName(projectName);
+    const result = await this.adapter.getProjects({ name: projectName, limit: 1 });
+    return result.success && result.data.length > 0 ? result.data[0] : null;
   }
 
   async getWorkTypes() {
