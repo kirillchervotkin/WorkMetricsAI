@@ -15,19 +15,19 @@ export class RealDocumentAPI implements IDocumentAPI {
   private client: AxiosInstance;
 
   constructor() {
-    this.username = config.DO_API_USERNAME;
-    this.password = config.DO_API_PASSWORD;
+    const username = config.DO_API_USERNAME;
+    const password = config.DO_API_PASSWORD;
 
     // Создаем Basic Auth с правильной кодировкой UTF-8
-    const credentials = `${this.username}:${this.password}`;
+    const credentials = `${username}:${password}`;
     const basicAuth = Buffer.from(credentials, 'utf8').toString('base64');
 
     // Альтернативный способ для проблемных символов
-    const alternativeAuth = btoa(unescape(encodeURIComponent(credentials)));
+    const alternativeAuth = Buffer.from(encodeURIComponent(credentials), 'utf8').toString('base64');
 
     console.log('🔐 Auth Debug:');
-    console.log('Username:', this.username);
-    console.log('Password length:', this.password.length);
+    console.log('Username:', username);
+    console.log('Password length:', password.length);
     console.log('Credentials string length:', credentials.length);
     console.log('Basic Auth (Buffer):', basicAuth);
     console.log('Basic Auth (Alternative):', alternativeAuth);
