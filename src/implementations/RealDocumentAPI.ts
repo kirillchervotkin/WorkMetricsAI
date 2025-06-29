@@ -55,9 +55,10 @@ export class RealDocumentAPI implements IDocumentAPI {
     try {
       console.log(`🔍 Real API: Поиск пользователей по именам ${params.names.join(', ')}`);
 
+      // Согласно документации API, параметр должен называться 'users', а не 'names'
       const response: AxiosResponse = await this.client.get('/users', {
         params: {
-          names: params.names.join(',')
+          users: params.names.join(',') // Используем 'users' как в документации
         }
       });
 
@@ -111,11 +112,14 @@ export class RealDocumentAPI implements IDocumentAPI {
         }
       }
 
+      // Согласно документации, если userId не указан, возвращаем все задачи
+      const requestParams: any = {};
+      if (userId) {
+        requestParams.userId = userId;
+      }
+
       const response: AxiosResponse = await this.client.get('/tasks', {
-        params: {
-          userId: userId,
-          limit: params.limit || 50
-        }
+        params: requestParams
       });
 
       if (response.status === 200 && response.data) {
@@ -178,26 +182,48 @@ export class RealDocumentAPI implements IDocumentAPI {
         }
       }
 
+      // Формируем параметры согласно документации API
+      const requestParams: any = {};
+      if (userId) {
+        requestParams.userId = userId;
+      }
+      if (params.startDate) {
+        // Конвертируем YYYY-MM-DD в YYYYMMDDHHMMSS
+        requestParams.from = params.startDate.replace(/-/g, '') + '000000';
+      }
+      if (params.endDate) {
+        // Конвертируем YYYY-MM-DD в YYYYMMDDHHMMSS
+        requestParams.to = params.endDate.replace(/-/g, '') + '235959';
+      }
+
       const response: AxiosResponse = await this.client.get('/stufftime', {
-        params: {
-          userId: userId,
-          startDate: params.startDate,
-          endDate: params.endDate,
-          limit: params.limit || 100
-        }
+        params: requestParams
       });
 
       if (response.status === 200 && response.data) {
-        const timeEntries: TimeEntry[] = Array.isArray(response.data) ? response.data.map((entry: any) => ({
-          id: entry.id || entry.guid,
-          userId: entry.userId || userId,
-          description: entry.description || entry.comment || entry.workDescription,
-          countOfMinutes: entry.countOfMinutes || entry.minutes || (entry.hours ? entry.hours * 60 : 0),
-          date: entry.date || entry.workDate || entry.created,
-          taskId: entry.taskId || entry.task?.id,
-          projectId: entry.projectId || entry.project?.id,
-          workTypeId: entry.workTypeId || entry.workType?.id
-        })) : [];
+        // Согласно документации, API возвращает массив пользователей с их трудозатратами
+        const timeEntries: TimeEntry[] = [];
+        let entryId = 1;
+
+        if (Array.isArray(response.data)) {
+          for (const userStuffTime of response.data) {
+            const userName = userStuffTime.user;
+            const userStuffTimeEntries = userStuffTime.stufftime || [];
+
+            for (const entry of userStuffTimeEntries) {
+              timeEntries.push({
+                id: `entry_${entryId++}`,
+                userId: userId || '',
+                description: entry.description || '',
+                countOfMinutes: entry.countOfMinutes || 0,
+                date: new Date().toISOString().split('T')[0], // Используем текущую дату
+                taskId: `task_${entryId}`,
+                projectId: `project_${entryId}`,
+                workTypeId: `worktype_${entryId}`
+              });
+            }
+          }
+        }
 
         console.log(`✅ Real API: Найдено записей времени: ${timeEntries.length}`);
         return {
@@ -228,11 +254,14 @@ export class RealDocumentAPI implements IDocumentAPI {
     try {
       console.log(`🏗️ Real API: Получение проектов ${params.name ? `по имени: ${params.name}` : ''}`);
 
+      // Согласно документации, параметр должен называться 'projectName'
+      const requestParams: any = {};
+      if (params.name) {
+        requestParams.projectName = params.name;
+      }
+
       const response: AxiosResponse = await this.client.get('/project', {
-        params: {
-          name: params.name,
-          limit: params.limit || 50
-        }
+        params: requestParams
       });
 
       if (response.status === 200 && response.data) {

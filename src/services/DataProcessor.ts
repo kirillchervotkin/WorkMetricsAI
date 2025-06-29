@@ -56,6 +56,7 @@ export interface ProcessedData {
 
 export class DataProcessor {
   private adapter: SimpleDocumentAPIAdapter;
+  private employeesCache: any[] | null = null;
 
   constructor() {
     this.adapter = new SimpleDocumentAPIAdapter();
@@ -92,6 +93,13 @@ export class DataProcessor {
 
   private async loadAllEmployees() {
     console.log('👥 Загружаем список всех сотрудников из базы данных...');
+
+    // Кэшируем результат чтобы не загружать повторно
+    if (this.employeesCache) {
+      console.log('🚀 Используем кэш сотрудников');
+      return this.employeesCache;
+    }
+
     const allEmployees = await this.adapter.getAllEmployees();
 
     if (!allEmployees.success || allEmployees.data.length === 0) {
@@ -100,6 +108,7 @@ export class DataProcessor {
     }
 
     console.log(`✅ Загружено сотрудников: ${allEmployees.data.length}`);
+    this.employeesCache = allEmployees.data;
     return allEmployees.data;
   }
 
@@ -233,12 +242,16 @@ export class DataProcessor {
       /(\d{4})/                  // просто "2024"
     ];
 
-    let year = null;
+    let year = today.getFullYear(); // По умолчанию текущий год
     for (const pattern of yearPatterns) {
       const match = query.match(pattern);
       if (match) {
-        year = parseInt(match[1]);
-        break;
+        const foundYear = parseInt(match[1]);
+        // Проверяем что год разумный (не слишком старый и не слишком новый)
+        if (foundYear >= 2020 && foundYear <= today.getFullYear() + 1) {
+          year = foundYear;
+          break;
+        }
       }
     }
     console.log('📅 Найден год:', year);
@@ -284,16 +297,15 @@ export class DataProcessor {
       };
     }
 
-    // Если найден только месяц (текущий год)
+    // Если найден только месяц (используем определенный год)
     if (month !== null) {
-      const currentYear = today.getFullYear();
-      const startDate = new Date(currentYear, month, 1);
-      const endDate = new Date(currentYear, month + 1, 0);
+      const startDate = new Date(year, month, 1);
+      const endDate = new Date(year, month + 1, 0);
 
       return {
         start: startDate.toISOString().split('T')[0],
         end: endDate.toISOString().split('T')[0],
-        label: `${monthName} ${currentYear} года`
+        label: `${monthName} ${year} года`
       };
     }
 
