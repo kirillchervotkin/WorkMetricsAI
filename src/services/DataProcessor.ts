@@ -357,8 +357,9 @@ export class DataProcessor {
     if (query.includes('просрочен') || query.includes('просрочка') ||
         query.includes('дедлайн')) return 'overdue_check';
 
-    if (query.includes('проекты') || query.includes('список проектов') ||
-        query.includes('последний проект')) return 'project_list';
+    if (query.includes('проект') || query.includes('проекты') ||
+        query.includes('список проектов') || query.includes('последний проект') ||
+        query.includes('проектах') || query.includes('по проекту')) return 'project_list';
 
     if (query.includes('что делал') || query.includes('активность') ||
         query.includes('работал над')) return 'user_activity';
