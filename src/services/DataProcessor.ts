@@ -7,6 +7,8 @@ export interface ProcessedData {
     totalTimeEntries: number;
     totalProjects: number;
     dateRange: string;
+    queryStrategy?: string;
+    targetEmployee?: string;
   };
   employees: Array<{
     name: string;
@@ -312,34 +314,47 @@ export class DataProcessor {
   }
 
   private aggregateData(rawData: any, context: any): ProcessedData {
-    console.log('🔄 Фильтруем данные по запрашиваемому периоду:', context.timeframe);
+    console.log('🔄 Подготавливаем данные для анализа:', context.timeframe);
 
-    // Фильтруем данные по запрашиваемому временному периоду
-    const filteredData = this.filterDataByTimeframe(rawData, context.timeframe);
+    // Если запрос касается конкретного человека - используем ВСЕ его данные
+    // LLM сам отфильтрует по времени в зависимости от вопроса
+    let dataToProcess;
 
-    console.log('📊 Данные после фильтрации:', {
+    if (context.employeeName) {
+      console.log(`👤 Запрос о конкретном сотруднике: ${context.employeeName}`);
+      console.log('📊 Используем ВСЕ данные сотрудника, LLM отфильтрует по вопросу');
+      dataToProcess = rawData; // Все данные без временной фильтрации
+    } else {
+      console.log('👥 Общий запрос - применяем временную фильтрацию');
+      dataToProcess = this.filterDataByTimeframe(rawData, context.timeframe);
+    }
+
+    console.log('📊 Данные для обработки:', {
       allTasks: rawData.tasks.length,
-      filteredTasks: filteredData.tasks.length,
+      processedTasks: dataToProcess.tasks.length,
       allTimeEntries: rawData.timeEntries.length,
-      filteredTimeEntries: filteredData.timeEntries.length
+      processedTimeEntries: dataToProcess.timeEntries.length,
+      strategy: context.employeeName ? 'ВСЕ_ДАННЫЕ_СОТРУДНИКА' : 'ВРЕМЕННАЯ_ФИЛЬТРАЦИЯ'
     });
 
-    // Группируем отфильтрованные данные по сотрудникам
-    const employeeStats = this.groupByEmployee(filteredData);
+    // Группируем данные по сотрудникам
+    const employeeStats = this.groupByEmployee(dataToProcess);
 
-    // Получаем активность за запрашиваемый период
-    const recentActivity = this.getRecentActivity(filteredData, 100);
+    // Получаем активность
+    const recentActivity = this.getRecentActivity(dataToProcess, 100);
 
-    // Задачи за запрашиваемый период
-    const topTasks = this.getTopTasks(filteredData, 50);
+    // Топ задачи
+    const topTasks = this.getTopTasks(dataToProcess, 50);
 
     return {
       summary: {
         totalUsers: rawData.users.length, // Общее количество пользователей
-        totalTasks: filteredData.tasks.length, // Задачи за период
-        totalTimeEntries: filteredData.timeEntries.length, // Записи времени за период
-        totalProjects: filteredData.projects.length, // Проекты за период
-        dateRange: context.timeframe.label
+        totalTasks: dataToProcess.tasks.length, // Задачи для анализа
+        totalTimeEntries: dataToProcess.timeEntries.length, // Записи времени для анализа
+        totalProjects: dataToProcess.projects.length, // Проекты для анализа
+        dateRange: context.timeframe.label,
+        queryStrategy: context.employeeName ? 'ВСЕ_ДАННЫЕ_СОТРУДНИКА' : 'ВРЕМЕННАЯ_ФИЛЬТРАЦИЯ',
+        targetEmployee: context.employeeName || 'ВСЕ_СОТРУДНИКИ'
       },
       employees: employeeStats,
       recentActivity,
