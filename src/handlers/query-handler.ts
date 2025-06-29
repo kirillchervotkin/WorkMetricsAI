@@ -117,15 +117,34 @@ function formatDataForLLM(processedData: any, userQuery: string): string {
     context += `\n`;
   }
 
-  // Последняя активность
+  // Активность за период
   if (processedData.recentActivity.length > 0) {
-    context += `⏰ ПОСЛЕДНЯЯ АКТИВНОСТЬ:\n`;
-    processedData.recentActivity.slice(0, 15).forEach((activity: any) => {
-      context += `• ${activity.date}: ${activity.employee} - ${activity.task} (${activity.hours}ч)\n`;
-      if (activity.description) {
-        context += `  ${activity.description}\n`;
+    context += `⏰ АКТИВНОСТЬ ЗА ПЕРИОД:\n`;
+
+    // Группируем по дням для лучшего отображения
+    const activityByDate = new Map();
+    processedData.recentActivity.forEach((activity: any) => {
+      if (!activityByDate.has(activity.date)) {
+        activityByDate.set(activity.date, []);
       }
+      activityByDate.get(activity.date).push(activity);
     });
+
+    // Выводим по дням
+    Array.from(activityByDate.entries())
+      .sort(([a], [b]) => b.localeCompare(a)) // Сортируем по дате (новые сначала)
+      .slice(0, 10) // Максимум 10 дней
+      .forEach(([date, activities]) => {
+        context += `\n📅 ${date}:\n`;
+        activities.forEach((activity: any, index: number) => {
+          const taskNumber = index + 1;
+          context += `  ${taskNumber}. ${activity.hours}ч - ${activity.description}\n`;
+        });
+
+        const totalHours = activities.reduce((sum: number, a: any) => sum + a.hours, 0);
+        context += `  📊 Итого за день: ${totalHours}ч\n`;
+      });
+
     context += `\n`;
   }
 
@@ -140,9 +159,12 @@ function formatDataForLLM(processedData: any, userQuery: string): string {
 
   context += `\n💡 ИНСТРУКЦИЯ ДЛЯ АНАЛИЗА:\n`;
   context += `• Все данные уже отфильтрованы по запрашиваемому периоду: ${processedData.summary.dateRange}\n`;
+  context += `• ВАЖНО: В ответе используй ТОЧНО тот же период, что указан в запросе пользователя\n`;
+  context += `• НЕ меняй год или месяц в ответе - используй данные из запроса\n`;
   context += `• Отвечай только на основе данных за этот период\n`;
   context += `• Используй конкретные цифры и факты из предоставленной информации\n`;
   context += `• Структурируй ответ: общая статистика → детали по сотрудникам → выводы\n`;
+  context += `• Вместо "Неизвестная задача" используй "Задача №1", "Задача №2" и т.д.\n`;
   context += `• Если данных за период нет - честно об этом скажи\n`;
   context += `• Используй HTML разметку для форматирования ответа\n`;
 

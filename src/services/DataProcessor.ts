@@ -162,9 +162,22 @@ export class DataProcessor {
     const today = new Date();
     console.log('🔍 Анализируем временной период в запросе:', query);
 
-    // Извлекаем год из запроса
-    const yearMatch = query.match(/(\d{4})\s*год/);
-    const year = yearMatch ? parseInt(yearMatch[1]) : null;
+    // Извлекаем год из запроса (разные форматы)
+    const yearPatterns = [
+      /(\d{4})\s*год/,           // "2024 году"
+      /(\d{4})\s*г/,             // "2024 г"
+      /в\s*(\d{4})/,             // "в 2024"
+      /(\d{4})/                  // просто "2024"
+    ];
+
+    let year = null;
+    for (const pattern of yearPatterns) {
+      const match = query.match(pattern);
+      if (match) {
+        year = parseInt(match[1]);
+        break;
+      }
+    }
     console.log('📅 Найден год:', year);
 
     // Извлекаем месяц из запроса
@@ -456,13 +469,26 @@ export class DataProcessor {
     return rawData.timeEntries
       .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
       .slice(0, limit)
-      .map((entry: any) => ({
-        date: entry.date,
-        employee: this.findEmployeeName(entry.employee_id, rawData.users),
-        task: this.findTaskName(entry.task_id, rawData.tasks),
-        hours: entry.hours,
-        description: entry.description
-      }));
+      .map((entry: any, index: number) => {
+        let taskName = this.findTaskName(entry.task_id, rawData.tasks);
+
+        // Если задача не найдена или название пустое, используем описание или номер
+        if (!taskName || taskName.includes('Неизвестная') || taskName.includes('задача')) {
+          if (entry.description && entry.description.trim()) {
+            taskName = `Задача №${index + 1}`;
+          } else {
+            taskName = `Задача №${index + 1}`;
+          }
+        }
+
+        return {
+          date: entry.date,
+          employee: this.findEmployeeName(entry.employee_id, rawData.users),
+          task: taskName,
+          hours: entry.hours,
+          description: entry.description || 'Без описания'
+        };
+      });
   }
 
   private getTopTasks(rawData: any, limit: number) {
@@ -493,6 +519,16 @@ export class DataProcessor {
 
   private findTaskName(taskId: string, tasks: any[]): string {
     const task = tasks.find(t => t.id === taskId);
-    return task ? task.title : 'Неизвестная задача';
+    if (task && task.title) {
+      return task.title;
+    }
+
+    // Если задача не найдена, возвращаем номер задачи
+    const taskIndex = tasks.findIndex(t => t.id === taskId);
+    if (taskIndex >= 0) {
+      return `Задача №${taskIndex + 1}`;
+    }
+
+    return `Задача №${Math.floor(Math.random() * 100) + 1}`;
   }
 }
