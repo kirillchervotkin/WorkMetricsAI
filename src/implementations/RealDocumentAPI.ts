@@ -1,4 +1,5 @@
 import axios, { AxiosInstance, AxiosResponse } from "axios";
+import https from "https";
 import { config } from "../config";
 import {
   IDocumentAPI,
@@ -14,17 +15,35 @@ export class RealDocumentAPI implements IDocumentAPI {
   private client: AxiosInstance;
 
   constructor() {
-    const basicAuth = Buffer.from(`${config.DO_API_USERNAME}:${config.DO_API_PASSWORD}`).toString('base64');
+    this.username = config.DO_API_USERNAME;
+    this.password = config.DO_API_PASSWORD;
+
+    // Создаем Basic Auth с правильной кодировкой UTF-8
+    const credentials = `${this.username}:${this.password}`;
+    const basicAuth = Buffer.from(credentials, 'utf8').toString('base64');
+
+    // Альтернативный способ для проблемных символов
+    const alternativeAuth = btoa(unescape(encodeURIComponent(credentials)));
+
+    console.log('🔐 Auth Debug:');
+    console.log('Username:', this.username);
+    console.log('Password length:', this.password.length);
+    console.log('Credentials string length:', credentials.length);
+    console.log('Basic Auth (Buffer):', basicAuth);
+    console.log('Basic Auth (Alternative):', alternativeAuth);
+    console.log('Expected from docs:', 'ZXhjaGFuZ2VfYXBpX3VzZXI6ZUBDTXc5JVEkb3FHVmRzRXt3');
+    console.log('Match with expected:', basicAuth === 'ZXhjaGFuZ2VfYXBpX3VzZXI6ZUBDTXc5JVEkb3FHVmRzRXt3');
 
     this.client = axios.create({
       baseURL: config.DO_API_URL,
       headers: {
         "Authorization": `Basic ${basicAuth}`,
         "Content-Type": "application/json",
-        "Accept": "application/json"
+        "Accept": "application/json",
+        "User-Agent": "WorkMetricsAI-Bot/1.0"
       },
       timeout: 15000,
-      httpsAgent: new (require('https').Agent)({
+      httpsAgent: new https.Agent({
         rejectUnauthorized: false
       })
     });
