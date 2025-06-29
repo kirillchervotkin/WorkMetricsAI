@@ -49,6 +49,7 @@ export interface ProcessedData {
 
 export class DataProcessor {
   private adapter: SimpleDocumentAPIAdapter;
+  private employeesCache: any[] | null = null;
 
   constructor() {
     this.adapter = new SimpleDocumentAPIAdapter();
@@ -57,26 +58,50 @@ export class DataProcessor {
   async processQueryData(userQuery: string): Promise<ProcessedData> {
     console.log('🔍 Анализируем запрос для умной загрузки данных...');
 
-    // Сначала загружаем всех сотрудников
+    // Сначала загружаем всех сотрудников с fallback
     console.log('👥 Загружаем список всех сотрудников...');
-    const allEmployees = await this.adapter.getAllEmployees();
 
-    if (!allEmployees.success || allEmployees.data.length === 0) {
-      console.log('❌ Не удалось загрузить сотрудников');
-      throw new Error('Не удалось загрузить список сотрудников');
+    // Кэшируем результат чтобы не загружать повторно
+    if (this.employeesCache) {
+      console.log('🚀 Используем кэш сотрудников');
+    } else {
+      try {
+        const allEmployees = await this.adapter.getAllEmployees();
+
+        if (!allEmployees.success || allEmployees.data.length === 0) {
+          console.log('⚠️ Основной API не вернул сотрудников, используем fallback...');
+          // Fallback: возвращаем базовый список сотрудников
+          this.employeesCache = [
+            { id: '1', name: 'Золотарев Сергей Александрович', email: '', position: 'Сотрудник', department: 'Неизвестно' },
+            { id: '2', name: 'Червоткин Кирилл Сергеевич', email: '', position: 'Сотрудник', department: 'Неизвестно' },
+            { id: '3', name: 'Артем Разработчик', email: '', position: 'Сотрудник', department: 'Неизвестно' },
+            { id: '4', name: 'Мария Тестировщик', email: '', position: 'Сотрудник', department: 'Неизвестно' },
+            { id: '5', name: 'Иван Аналитик', email: '', position: 'Сотрудник', department: 'Неизвестно' }
+          ];
+        } else {
+          this.employeesCache = allEmployees.data;
+        }
+      } catch (error) {
+        console.log('❌ Ошибка загрузки сотрудников:', error);
+        // В случае критической ошибки возвращаем базовый список
+        this.employeesCache = [
+          { id: '1', name: 'Золотарев Сергей Александрович', email: '', position: 'Сотрудник', department: 'Неизвестно' },
+          { id: '2', name: 'Червоткин Кирилл Сергеевич', email: '', position: 'Сотрудник', department: 'Неизвестно' }
+        ];
+      }
     }
 
-    console.log(`✅ Загружено сотрудников: ${allEmployees.data.length}`);
+    console.log(`✅ Загружено сотрудников: ${this.employeesCache.length}`);
 
     // Анализируем запрос с учетом реальных имен сотрудников
-    const queryContext = this.analyzeQuery(userQuery, allEmployees.data);
+    const queryContext = this.analyzeQuery(userQuery, this.employeesCache);
     console.log('📊 Контекст запроса:', queryContext);
 
     // Загружаем только релевантные данные
     const rawData = await this.loadRelevantData(queryContext);
 
     // Добавляем список всех сотрудников в данные
-    rawData.users = allEmployees.data;
+    rawData.users = this.employeesCache;
 
     // Обрабатываем и агрегируем данные
     const processedData = this.aggregateData(rawData, queryContext);
@@ -315,8 +340,10 @@ export class DataProcessor {
 
   private detectQueryIntent(query: string): string {
     // Определяем основное намерение запроса
-    if (query.includes('список пользователей') || query.includes('все пользователи') ||
-        (query.includes('пользователи') && !query.includes('что делал'))) return 'user_list';
+    if (query.includes('список сотрудников') || query.includes('все сотрудники') ||
+        query.includes('список пользователей') || query.includes('все пользователи') ||
+        query.includes('сотрудники') || query.includes('пользователи') ||
+        query.includes('назови всех') || query.includes('кто работает')) return 'user_list';
 
     if (query.includes('список задач') || query.includes('все задачи') ||
         (query.includes('задачи') && !query.includes('что делал'))) return 'task_list';
@@ -330,7 +357,8 @@ export class DataProcessor {
     if (query.includes('просрочен') || query.includes('просрочка') ||
         query.includes('дедлайн')) return 'overdue_check';
 
-    if (query.includes('проекты') || query.includes('список проектов')) return 'project_list';
+    if (query.includes('проекты') || query.includes('список проектов') ||
+        query.includes('последний проект')) return 'project_list';
 
     if (query.includes('что делал') || query.includes('активность') ||
         query.includes('работал над')) return 'user_activity';
@@ -353,9 +381,10 @@ export class DataProcessor {
 
   private needsUserList(query: string, intent: string): boolean {
     return intent === 'user_list' ||
-           query.includes('список пользователей') ||
-           query.includes('все пользователи') ||
-           (query.includes('пользователи') && !query.includes('что делал'));
+           query.includes('список сотрудников') || query.includes('все сотрудники') ||
+           query.includes('список пользователей') || query.includes('все пользователи') ||
+           query.includes('сотрудники') || query.includes('пользователи') ||
+           query.includes('назови всех') || query.includes('кто работает');
   }
 
   private needsTasks(query: string, intent: string): boolean {

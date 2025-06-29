@@ -55,10 +55,16 @@ export class RealDocumentAPI implements IDocumentAPI {
     try {
       console.log(`🔍 Real API: Поиск пользователей по именам ${params.names.join(', ')}`);
 
+      // Согласно документации API, параметр должен называться 'users', а не 'names'
+      const requestParams = {
+        users: params.names.join(',') // Используем 'users' как в документации
+      };
+
+      console.log(`📋 Параметры запроса:`, requestParams);
+      console.log(`🌐 Полный URL: ${this.client.defaults.baseURL}/users?users=${encodeURIComponent(requestParams.users)}`);
+
       const response: AxiosResponse = await this.client.get('/users', {
-        params: {
-          names: params.names.join(',')
-        }
+        params: requestParams
       });
 
       if (response.status === 200 && response.data) {
@@ -83,6 +89,27 @@ export class RealDocumentAPI implements IDocumentAPI {
 
     } catch (error: any) {
       console.error('❌ Real API Error (getUsersByNames):', error.message);
+
+      if (error.response) {
+        console.log(`📊 Response Status: ${error.response.status}`);
+        console.log(`📊 Response Data:`, error.response.data);
+        console.log(`📊 Response Headers:`, error.response.headers);
+
+        if (error.response.status === 400) {
+          console.log(`⚠️ 400 Bad Request - возможно неправильные параметры запроса`);
+          console.log(`🔍 Проверьте параметр 'users' в документации API`);
+        }
+      }
+
+      if (error.request) {
+        console.log(`📊 Request Config:`, {
+          url: error.config?.url,
+          method: error.config?.method,
+          params: error.config?.params,
+          headers: error.config?.headers
+        });
+      }
+
       return {
         success: false,
         data: [],
