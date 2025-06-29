@@ -14,6 +14,23 @@ export interface ProcessedData {
     taskCount: number;
     totalHours: number;
     recentTasks: string[];
+    allTasks: Array<{
+      title: string;
+      description: string;
+      date: string;
+      hours: number;
+      status: string;
+    }>;
+    workTypes: string[];
+    projects: string[];
+    timeEntries: Array<{
+      date: string;
+      hours: number;
+      description: string;
+      taskId: string;
+      projectId: string;
+      workType: string;
+    }>;
   }>;
   recentActivity: Array<{
     date: string;
@@ -143,7 +160,7 @@ export class DataProcessor {
 
   private extractTimeframe(query: string) {
     const today = new Date();
-    
+
     if (query.includes('вчера')) {
       const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
       return {
@@ -152,7 +169,7 @@ export class DataProcessor {
         label: 'вчера'
       };
     }
-    
+
     if (query.includes('сегодня')) {
       return {
         start: today.toISOString().split('T')[0],
@@ -160,7 +177,7 @@ export class DataProcessor {
         label: 'сегодня'
       };
     }
-    
+
     if (query.includes('неделю') || query.includes('неделе')) {
       const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
       return {
@@ -169,7 +186,7 @@ export class DataProcessor {
         label: 'за неделю'
       };
     }
-    
+
     if (query.includes('месяц')) {
       const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
       return {
@@ -178,13 +195,13 @@ export class DataProcessor {
         label: 'за месяц'
       };
     }
-    
-    // По умолчанию - последние 7 дней
-    const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    // По умолчанию - ВСЕ доступные данные (за последний год)
+    const yearAgo = new Date(today.getTime() - 365 * 24 * 60 * 60 * 1000);
     return {
-      start: weekAgo.toISOString().split('T')[0],
+      start: yearAgo.toISOString().split('T')[0],
       end: today.toISOString().split('T')[0],
-      label: 'за последние 7 дней'
+      label: 'за весь доступный период'
     };
   }
 
@@ -198,39 +215,56 @@ export class DataProcessor {
   }
 
   private async loadRelevantData(context: any) {
-    // Устанавливаем разумные лимиты
+    // Загружаем ВСЕ доступные данные без ограничений по времени
     const limits = {
-      tasks: context.needsDetailed ? 100 : 50,
-      timeEntries: context.needsDetailed ? 200 : 100,
-      projects: 20
+      tasks: context.employeeName ? 1000 : 500, // Максимум данных
+      timeEntries: context.employeeName ? 2000 : 1000, // Максимум записей времени
+      projects: 100 // Все проекты
     };
 
-    console.log('📥 Загружаем данные с лимитами:', limits);
+    console.log('📥 Загружаем ВСЕ доступные данные с лимитами:', limits);
+    console.log('🔍 Запрашиваемый период для фильтрации:', context.timeframe);
+
+    // Загружаем данные за весь период (без фильтрации по времени)
+    const yearAgo = new Date();
+    yearAgo.setFullYear(yearAgo.getFullYear() - 2); // За 2 года
 
     return await this.adapter.loadAllData({
       employee_name: context.employeeName,
-      start_date: context.timeframe.start,
-      end_date: context.timeframe.end,
+      start_date: yearAgo.toISOString().split('T')[0], // Загружаем за 2 года
+      end_date: new Date().toISOString().split('T')[0], // До сегодня
       ...limits
     });
   }
 
   private aggregateData(rawData: any, context: any): ProcessedData {
-    // Группируем данные по сотрудникам
-    const employeeStats = this.groupByEmployee(rawData);
-    
-    // Получаем последнюю активность
-    const recentActivity = this.getRecentActivity(rawData, 20);
-    
-    // Топ задач по времени
-    const topTasks = this.getTopTasks(rawData, 15);
+    console.log('🔄 Фильтруем данные по запрашиваемому периоду:', context.timeframe);
+
+    // Фильтруем данные по запрашиваемому временному периоду
+    const filteredData = this.filterDataByTimeframe(rawData, context.timeframe);
+
+    console.log('📊 Данные после фильтрации:', {
+      allTasks: rawData.tasks.length,
+      filteredTasks: filteredData.tasks.length,
+      allTimeEntries: rawData.timeEntries.length,
+      filteredTimeEntries: filteredData.timeEntries.length
+    });
+
+    // Группируем отфильтрованные данные по сотрудникам
+    const employeeStats = this.groupByEmployee(filteredData);
+
+    // Получаем активность за запрашиваемый период
+    const recentActivity = this.getRecentActivity(filteredData, 100);
+
+    // Задачи за запрашиваемый период
+    const topTasks = this.getTopTasks(filteredData, 50);
 
     return {
       summary: {
-        totalUsers: rawData.users.length,
-        totalTasks: rawData.tasks.length,
-        totalTimeEntries: rawData.timeEntries.length,
-        totalProjects: rawData.projects.length,
+        totalUsers: rawData.users.length, // Общее количество пользователей
+        totalTasks: filteredData.tasks.length, // Задачи за период
+        totalTimeEntries: filteredData.timeEntries.length, // Записи времени за период
+        totalProjects: filteredData.projects.length, // Проекты за период
         dateRange: context.timeframe.label
       },
       employees: employeeStats,
@@ -239,10 +273,38 @@ export class DataProcessor {
     };
   }
 
+  // Фильтрует данные по временному диапазону
+  private filterDataByTimeframe(rawData: any, timeframe: any) {
+    const startDate = timeframe.start;
+    const endDate = timeframe.end;
+
+    console.log(`🗓️ Фильтруем данные с ${startDate} по ${endDate}`);
+
+    // Фильтруем записи времени по дате
+    const filteredTimeEntries = rawData.timeEntries.filter((entry: any) => {
+      return entry.date >= startDate && entry.date <= endDate;
+    });
+
+    // Фильтруем задачи по дате
+    const filteredTasks = rawData.tasks.filter((task: any) => {
+      return task.date >= startDate && task.date <= endDate;
+    });
+
+    // Проекты оставляем все (они не привязаны к конкретным датам)
+    const filteredProjects = rawData.projects;
+
+    return {
+      ...rawData,
+      tasks: filteredTasks,
+      timeEntries: filteredTimeEntries,
+      projects: filteredProjects
+    };
+  }
+
   private groupByEmployee(rawData: any) {
     const employeeMap = new Map();
 
-    // Группируем задачи по сотрудникам
+    // Группируем задачи по сотрудникам с полной детализацией
     rawData.tasks.forEach((task: any) => {
       const employeeName = this.findEmployeeName(task.employee_id, rawData.users);
       if (!employeeMap.has(employeeName)) {
@@ -251,24 +313,69 @@ export class DataProcessor {
           id: task.employee_id,
           taskCount: 0,
           totalHours: 0,
-          recentTasks: []
+          recentTasks: [],
+          allTasks: [], // Все задачи с деталями
+          workTypes: new Set(), // Типы работ
+          projects: new Set(), // Проекты
+          timeEntries: [] // Все записи времени
         });
       }
-      
+
       const employee = employeeMap.get(employeeName);
       employee.taskCount++;
       employee.recentTasks.push(task.title);
+      employee.allTasks.push({
+        title: task.title,
+        description: task.description,
+        date: task.date,
+        hours: task.hours,
+        status: task.status
+      });
     });
 
-    // Добавляем время из трудозатрат
+    // Добавляем детальную информацию из трудозатрат
     rawData.timeEntries.forEach((entry: any) => {
       const employeeName = this.findEmployeeName(entry.employee_id, rawData.users);
       if (employeeMap.has(employeeName)) {
-        employeeMap.get(employeeName).totalHours += entry.hours;
+        const employee = employeeMap.get(employeeName);
+        employee.totalHours += entry.hours;
+        employee.timeEntries.push({
+          date: entry.date,
+          hours: entry.hours,
+          description: entry.description,
+          taskId: entry.task_id,
+          projectId: entry.project_id,
+          workType: entry.work_type
+        });
+
+        // Собираем уникальные типы работ
+        if (entry.work_type) {
+          employee.workTypes.add(entry.work_type);
+        }
       }
     });
 
-    return Array.from(employeeMap.values()).slice(0, 10); // Топ 10 сотрудников
+    // Добавляем информацию о проектах
+    rawData.projects.forEach((project: any) => {
+      // Находим сотрудников, работавших над проектом
+      rawData.timeEntries.forEach((entry: any) => {
+        if (entry.project_id === project.id) {
+          const employeeName = this.findEmployeeName(entry.employee_id, rawData.users);
+          if (employeeMap.has(employeeName)) {
+            employeeMap.get(employeeName).projects.add(project.name);
+          }
+        }
+      });
+    });
+
+    // Преобразуем Set в массивы для JSON
+    const employees = Array.from(employeeMap.values()).map(emp => ({
+      ...emp,
+      workTypes: Array.from(emp.workTypes),
+      projects: Array.from(emp.projects)
+    }));
+
+    return employees; // Возвращаем ВСЕХ сотрудников, не ограничиваем
   }
 
   private getRecentActivity(rawData: any, limit: number) {

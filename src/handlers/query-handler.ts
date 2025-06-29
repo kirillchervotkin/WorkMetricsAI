@@ -67,22 +67,51 @@ async function analyzeWithLLM(userQuery: string, processedData: any): Promise<st
 function formatDataForLLM(processedData: any, userQuery: string): string {
   let context = `ВОПРОС: "${userQuery}"\n`;
   context += `СЕГОДНЯ: ${new Date().toISOString().split('T')[0]}\n`;
-  context += `ПЕРИОД АНАЛИЗА: ${processedData.summary.dateRange}\n\n`;
+  context += `АНАЛИЗИРУЕМЫЙ ПЕРИОД: ${processedData.summary.dateRange}\n\n`;
 
-  // Общая статистика
-  context += `📊 ОБЩАЯ СТАТИСТИКА:\n`;
-  context += `• Сотрудников: ${processedData.summary.totalUsers}\n`;
-  context += `• Задач: ${processedData.summary.totalTasks}\n`;
-  context += `• Записей времени: ${processedData.summary.totalTimeEntries}\n`;
+  // Общая статистика за запрашиваемый период
+  context += `📊 СТАТИСТИКА ЗА ПЕРИОД "${processedData.summary.dateRange.toUpperCase()}":\n`;
+  context += `• Всего сотрудников в системе: ${processedData.summary.totalUsers}\n`;
+  context += `• Задач за период: ${processedData.summary.totalTasks}\n`;
+  context += `• Записей времени за период: ${processedData.summary.totalTimeEntries}\n`;
   context += `• Проектов: ${processedData.summary.totalProjects}\n\n`;
 
-  // Активность сотрудников
+  context += `⚠️ ВАЖНО: Данные показаны только за запрашиваемый период!\n\n`;
+
+  // Детальная активность сотрудников
   if (processedData.employees.length > 0) {
-    context += `👥 АКТИВНОСТЬ СОТРУДНИКОВ:\n`;
-    processedData.employees.slice(0, 10).forEach((emp: any) => {
-      context += `• ${emp.name}: ${emp.taskCount} задач, ${emp.totalHours.toFixed(1)} часов\n`;
-      if (emp.recentTasks.length > 0) {
-        context += `  Последние задачи: ${emp.recentTasks.slice(0, 3).join(', ')}\n`;
+    context += `👥 ДЕТАЛЬНАЯ ИНФОРМАЦИЯ ПО СОТРУДНИКАМ:\n`;
+    processedData.employees.forEach((emp: any) => {
+      context += `\n📋 ${emp.name}:\n`;
+      context += `• Всего задач: ${emp.taskCount}\n`;
+      context += `• Общее время работы: ${emp.totalHours.toFixed(1)} часов\n`;
+
+      if (emp.workTypes.length > 0) {
+        context += `• Типы работ: ${emp.workTypes.join(', ')}\n`;
+      }
+
+      if (emp.projects.length > 0) {
+        context += `• Проекты: ${emp.projects.join(', ')}\n`;
+      }
+
+      if (emp.allTasks.length > 0) {
+        context += `• Задачи:\n`;
+        emp.allTasks.forEach((task: any, index: number) => {
+          context += `  ${index + 1}. ${task.title} (${task.hours}ч, ${task.date}, ${task.status})\n`;
+          if (task.description && task.description !== task.title) {
+            context += `     ${task.description}\n`;
+          }
+        });
+      }
+
+      if (emp.timeEntries.length > 0) {
+        context += `• Записи времени:\n`;
+        emp.timeEntries.forEach((entry: any, index: number) => {
+          context += `  ${index + 1}. ${entry.date}: ${entry.hours}ч - ${entry.description}\n`;
+          if (entry.workType) {
+            context += `     Тип работы: ${entry.workType}\n`;
+          }
+        });
       }
     });
     context += `\n`;
@@ -109,7 +138,13 @@ function formatDataForLLM(processedData: any, userQuery: string): string {
     context += `\n`;
   }
 
-  context += `\n💡 ИНСТРУКЦИЯ: Проанализируй данные и ответь на вопрос пользователя. Используй конкретные цифры и факты из предоставленных данных.`;
+  context += `\n💡 ИНСТРУКЦИЯ ДЛЯ АНАЛИЗА:\n`;
+  context += `• Все данные уже отфильтрованы по запрашиваемому периоду: ${processedData.summary.dateRange}\n`;
+  context += `• Отвечай только на основе данных за этот период\n`;
+  context += `• Используй конкретные цифры и факты из предоставленной информации\n`;
+  context += `• Структурируй ответ: общая статистика → детали по сотрудникам → выводы\n`;
+  context += `• Если данных за период нет - честно об этом скажи\n`;
+  context += `• Используй HTML разметку для форматирования ответа\n`;
 
   return context;
 }
