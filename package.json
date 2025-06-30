@@ -7,7 +7,10 @@
     "dev": "nodemon --exec ts-node src/bot.ts",
     "build": "tsc",
     "start": "node dist/bot.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "test:api": "ts-node src/tests/run-api-tests.ts",
+    "test:api:specific": "ts-node src/tests/specific-tests.ts",
+    "test:api:all": "npm run test:api && npm run test:api:specific"
   },
   "keywords": ["telegram", "bot", "document-management", "api", "automation", "ai", "gemini", "typescript"],
   "author": "Document Management Team",

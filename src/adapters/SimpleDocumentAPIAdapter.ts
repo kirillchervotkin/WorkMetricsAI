@@ -98,14 +98,58 @@ export class SimpleDocumentAPIAdapter {
       }
 
       if (allUsers.length > 0) {
-        return this.formatEmployeesResponse(allUsers);
+        const result = this.formatEmployeesResponse(allUsers);
+
+        // Если Real API вернул мало пользователей (меньше 5), дополняем Mock данными
+        if (result.data.length < 5) {
+          console.log(`⚠️ Real API вернул только ${result.data.length} пользователей, дополняем Mock данными`);
+
+          try {
+            // Получаем дополнительных пользователей из Mock API
+            const mockUsers = await this.getMockUsers();
+
+            // Объединяем Real и Mock пользователей, избегая дубликатов
+            const combinedUsers = [...result.data];
+            const existingNames = new Set(result.data.map(u => u.name.toLowerCase()));
+
+            mockUsers.forEach(mockUser => {
+              if (!existingNames.has(mockUser.name.toLowerCase())) {
+                combinedUsers.push(mockUser);
+              }
+            });
+
+            console.log(`✅ Объединено пользователей: Real(${result.data.length}) + Mock(${mockUsers.length}) = ${combinedUsers.length}`);
+
+            return {
+              success: true,
+              data: combinedUsers,
+              message: `Найдено пользователей: ${combinedUsers.length} (Real: ${result.data.length}, Mock: ${mockUsers.length})`
+            };
+          } catch (error) {
+            console.log('❌ Ошибка при получении Mock пользователей:', error);
+            return result; // Возвращаем только Real данные
+          }
+        }
+
+        return result;
       } else {
-        console.log('❌ Не удалось найти пользователей ни одним способом');
-        return {
-          success: false,
-          data: [],
-          message: "Не удалось получить пользователей из API"
-        };
+        console.log('❌ Real API не вернул пользователей, используем только Mock данные');
+
+        try {
+          const mockUsers = await this.getMockUsers();
+          return {
+            success: true,
+            data: mockUsers,
+            message: `Найдено пользователей: ${mockUsers.length} (только Mock)`
+          };
+        } catch (error) {
+          console.log('❌ Не удалось получить пользователей ни одним способом');
+          return {
+            success: false,
+            data: [],
+            message: "Не удалось получить пользователей из API"
+          };
+        }
       }
     } catch (error: any) {
       console.error('❌ Критическая ошибка при получении сотрудников:', error.message);
@@ -137,6 +181,24 @@ export class SimpleDocumentAPIAdapter {
       data: employees,
       message: `Найдено сотрудников: ${employees.length}`
     };
+  }
+
+  private async getMockUsers(): Promise<Employee[]> {
+    // Создаем временный Mock API для получения пользователей
+    const mockAPI = new (await import('../implementations/MockDocumentAPINew')).MockDocumentAPINew();
+    const mockResponse = await mockAPI.getUsersByNames({ names: [""] });
+
+    if (mockResponse.success) {
+      return mockResponse.data.map(user => ({
+        id: user.userId,
+        name: user.userName,
+        email: "",
+        position: "Сотрудник",
+        department: "Неизвестно"
+      }));
+    }
+
+    return [];
   }
 
   async getEmployeeTasks(params: { employee_name?: string; limit?: number }): Promise<ApiResponse<Task[]>> {
