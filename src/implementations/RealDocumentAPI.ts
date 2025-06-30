@@ -300,11 +300,27 @@ export class RealDocumentAPI implements IDocumentAPI {
         };
       }
 
+      // Конвертируем даты в формат API (YYYYMMDDHHMMSS)
+      let fromParam, toParam;
+      if (params.startDate) {
+        fromParam = params.startDate.replace(/-/g, '') + '000000';
+      }
+      if (params.endDate) {
+        toParam = params.endDate.replace(/-/g, '') + '235959';
+      }
+
+      console.log(`⏱️ Real API: Параметры запроса:`, {
+        userId,
+        from: fromParam,
+        to: toParam,
+        limit: params.limit || 100
+      });
+
       const response: AxiosResponse = await this.client.get('/stufftime', {
         params: {
           userId: userId,
-          startDate: params.startDate,
-          endDate: params.endDate,
+          from: fromParam,
+          to: toParam,
           limit: params.limit || 100
         }
       });

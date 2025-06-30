@@ -462,9 +462,24 @@ export class SimpleDocumentAPIAdapter {
       const defaultEndDate = new Date().toISOString().split('T')[0];
       const defaultStartDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
+      // Оптимизация: если запрос о конкретном сотруднике - не загружаем всех
+      let employeesPromise;
+      if (params.employee_name) {
+        console.log(`🎯 Оптимизированная загрузка для конкретного сотрудника: ${params.employee_name}`);
+        // Загружаем только нужного сотрудника
+        employeesPromise = this.findUserByName(params.employee_name).then(result => ({
+          success: result.success,
+          data: result.data,
+          message: result.message
+        }));
+      } else {
+        console.log(`👥 Загружаем всех сотрудников для общего запроса`);
+        employeesPromise = this.getAllEmployees();
+      }
+
       const [workTypes, employees, tasks, timeEntries, projects] = await Promise.all([
         this.getWorkTypes(),
-        this.getAllEmployees(),
+        employeesPromise,
         this.getEmployeeTasks({
           employee_name: params.employee_name,
           limit: TASK_LIMIT
