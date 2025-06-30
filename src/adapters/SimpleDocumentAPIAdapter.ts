@@ -272,8 +272,8 @@ export class SimpleDocumentAPIAdapter {
     }
   }
 
-  // Вспомогательный метод для поиска пользователя по имени
-  private async findUserByName(searchName: string): Promise<ApiResponse<Employee[]>> {
+  // Публичный метод для поиска пользователя по имени
+  async findUserByName(searchName: string): Promise<ApiResponse<Employee[]>> {
     try {
       // Пробуем разные варианты поиска
       const searchVariants = [
@@ -446,10 +446,26 @@ export class SimpleDocumentAPIAdapter {
     }
   }
 
+  private needsAllEmployees(query?: string): boolean {
+    if (!query) return true;
+
+    const queryLower = query.toLowerCase();
+
+    // Запросы, требующие список всех сотрудников
+    const listPatterns = [
+      'назови.*сотрудник', 'перечисли.*сотрудник', 'список.*сотрудник',
+      'кто работает', 'кто есть', 'все сотрудники', 'всех сотрудников',
+      'сколько сотрудников', 'количество сотрудников'
+    ];
+
+    return listPatterns.some(pattern => new RegExp(pattern).test(queryLower));
+  }
+
   async loadAllData(params: {
     start_date?: string;
     end_date?: string;
-    employee_name?: string
+    employee_name?: string;
+    query?: string;
   } = {}) {
     try {
       console.log('🔄 Загружаем релевантные данные из ДО...');
@@ -462,9 +478,11 @@ export class SimpleDocumentAPIAdapter {
       const defaultEndDate = new Date().toISOString().split('T')[0];
       const defaultStartDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-      // Оптимизация: если запрос о конкретном сотруднике - не загружаем всех
+      // Определяем стратегию загрузки пользователей
       let employeesPromise;
-      if (params.employee_name) {
+      const isListRequest = this.needsAllEmployees(params.query);
+
+      if (params.employee_name && !isListRequest) {
         console.log(`🎯 Оптимизированная загрузка для конкретного сотрудника: ${params.employee_name}`);
         // Загружаем только нужного сотрудника
         employeesPromise = this.findUserByName(params.employee_name).then(result => ({
@@ -473,7 +491,7 @@ export class SimpleDocumentAPIAdapter {
           message: result.message
         }));
       } else {
-        console.log(`👥 Загружаем всех сотрудников для общего запроса`);
+        console.log(`👥 Загружаем всех сотрудников для ${isListRequest ? 'запроса списка' : 'общего запроса'}`);
         employeesPromise = this.getAllEmployees();
       }
 

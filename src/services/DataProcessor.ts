@@ -1,4 +1,5 @@
 import { SimpleDocumentAPIAdapter } from "../adapters/SimpleDocumentAPIAdapter";
+import { NameExtractor } from './NameExtractor';
 
 export interface ProcessedData {
   summary: {
@@ -51,9 +52,102 @@ export interface ProcessedData {
 
 export class DataProcessor {
   private adapter: SimpleDocumentAPIAdapter;
+  private nameExtractor: NameExtractor;
 
-  constructor() {
+  constructor(llmService?: any) {
     this.adapter = new SimpleDocumentAPIAdapter();
+    this.nameExtractor = new NameExtractor(llmService);
+  }
+
+  // Новый простой метод обработки запросов
+  async processQuery(userQuery: string): Promise<ProcessedData> {
+    console.log(`🔍 Простая обработка запроса: "${userQuery}"`);
+
+    // 1. Извлекаем имя сотрудника через ИИ
+    const extractedName = await this.nameExtractor.extractName(userQuery);
+
+    if (extractedName) {
+      console.log(`👤 Найдено имя сотрудника: "${extractedName}"`);
+
+      // 2. Ищем сотрудника по имени и получаем userId
+      const userResponse = await this.adapter.findUserByName(extractedName);
+
+      if (userResponse.success && userResponse.data.length > 0) {
+        const employee = userResponse.data[0];
+        console.log(`✅ Найден сотрудник: ${employee.name} (ID: ${employee.id})`);
+
+        // 3. Загружаем ВСЕ данные сотрудника по userId
+        const rawData = await this.adapter.loadAllData({
+          employee_name: employee.name,
+          start_date: '2020-01-01', // Загружаем за весь период
+          end_date: new Date().toISOString().split('T')[0],
+          query: userQuery
+        });
+
+        console.log(`📊 Загружены данные сотрудника:`, {
+          tasks: rawData.tasks.length,
+          timeEntries: rawData.timeEntries.length,
+          projects: rawData.projects.length
+        });
+
+        // 4. Возвращаем данные для ИИ (без фильтрации)
+        return this.createProcessedData(rawData, employee.name, userQuery);
+
+      } else {
+        console.log(`❌ Сотрудник "${extractedName}" не найден в системе`);
+      }
+    } else {
+      console.log(`👥 Имя не найдено - обрабатываем как общий запрос`);
+
+      // Загружаем общие данные
+      const rawData = await this.adapter.loadAllData({
+        query: userQuery
+      });
+
+      return this.createProcessedData(rawData, null, userQuery);
+    }
+
+    // Fallback - пустые данные
+    return this.createEmptyProcessedData(userQuery);
+  }
+
+  // Вспомогательные методы
+  private createProcessedData(rawData: any, employeeName: string | null, userQuery: string): ProcessedData {
+    const employees = this.groupByEmployee(rawData);
+    const recentActivity = this.getRecentActivity(rawData, 100);
+    const topTasks = this.getTopTasks(rawData, 50);
+
+    return {
+      summary: {
+        totalUsers: rawData.users.length,
+        totalTasks: rawData.tasks.length,
+        totalTimeEntries: rawData.timeEntries.length,
+        totalProjects: rawData.projects.length,
+        dateRange: 'за весь доступный период',
+        queryStrategy: employeeName ? 'ВСЕ_ДАННЫЕ_СОТРУДНИКА' : 'ОБЩИЙ_ЗАПРОС',
+        targetEmployee: employeeName || 'ВСЕ_СОТРУДНИКИ'
+      },
+      employees,
+      recentActivity,
+      topTasks
+    };
+  }
+
+  private createEmptyProcessedData(userQuery: string): ProcessedData {
+    return {
+      summary: {
+        totalUsers: 0,
+        totalTasks: 0,
+        totalTimeEntries: 0,
+        totalProjects: 0,
+        dateRange: 'нет данных',
+        queryStrategy: 'ОШИБКА',
+        targetEmployee: 'НЕ_НАЙДЕН'
+      },
+      employees: [],
+      recentActivity: [],
+      topTasks: []
+    };
   }
 
   async processQueryData(userQuery: string): Promise<ProcessedData> {
@@ -163,9 +257,13 @@ export class DataProcessor {
       return 'НЕИЗВЕСТНЫЙ_СОТРУДНИК';
     }
 
-    if (query.includes('все') || query.includes('всех') || query.includes('каждый') ||
-        query.includes('любой') || query.includes('сотрудник') && !query.includes('конкретн')) {
-      console.log('🔍 Обнаружен общий запрос о сотрудниках - используем стратегию полных данных');
+    // Проверяем запросы о списке/перечислении сотрудников
+    if (query.includes('назови') && (query.includes('сотрудник') || query.includes('людей') || query.includes('команд')) ||
+        query.includes('перечисли') || query.includes('список') && query.includes('сотрудник') ||
+        query.includes('кто работает') || query.includes('кто есть') || query.includes('какие сотрудники') ||
+        query.includes('все') || query.includes('всех') || query.includes('каждый') ||
+        query.includes('любой') || (query.includes('сотрудник') && !query.includes('конкретн'))) {
+      console.log('🔍 Обнаружен запрос о списке сотрудников - используем стратегию полных данных');
       return 'ВСЕ_СОТРУДНИКИ';
     }
 

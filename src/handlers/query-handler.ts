@@ -234,9 +234,9 @@ export async function handleQuery(ctx: Context) {
     await ctx.replyWithChatAction("typing");
     console.log(`📝 Запрос: "${userQuery}"`);
 
-    // Получаем и обрабатываем релевантные данные из системы ДО
-    const processor = new DataProcessor();
-    const processedData = await processor.processQueryData(userQuery);
+    // Получаем и обрабатываем релевантные данные через новый простой метод
+    const processor = new DataProcessor(geminiService);
+    const processedData = await processor.processQuery(userQuery);
     
     console.log("📊 Обработанные данные:", processedData.summary);
 
