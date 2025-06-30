@@ -221,21 +221,16 @@ export class RealDocumentAPI implements IDocumentAPI {
 
   async getEmployeeTasks(params: { employee_name?: string; userId?: string; limit?: number }): Promise<APIResponse<Task[]>> {
     try {
-      console.log(`📋 Real API: Получение задач для ${params.employee_name || params.userId}`);
+      const userId = params.userId;
+      console.log(`📋 Real API: Получение задач для userId: ${userId}`);
 
-      // Сначала получаем userId если передано имя
-      let userId = params.userId;
-      if (!userId && params.employee_name) {
-        const usersResult = await this.getUsersByNames({ names: [params.employee_name] });
-        if (usersResult.success && usersResult.data.length > 0) {
-          userId = usersResult.data[0].userId;
-        } else {
-          return {
-            success: false,
-            data: [],
-            message: 'Пользователь не найден'
-          };
-        }
+      if (!userId) {
+        console.log(`❌ Real API: userId не указан для получения задач`);
+        return {
+          success: false,
+          data: [],
+          message: 'userId обязателен для получения задач'
+        };
       }
 
       const response: AxiosResponse = await this.client.get('/tasks', {
@@ -293,21 +288,16 @@ export class RealDocumentAPI implements IDocumentAPI {
     limit?: number
   }): Promise<APIResponse<TimeEntry[]>> {
     try {
-      console.log(`⏱️ Real API: Получение трудозатрат для ${params.employee_name || params.userId}`);
+      const userId = params.userId;
+      console.log(`⏱️ Real API: Получение трудозатрат для userId: ${userId}`);
 
-      // Получаем userId если передано имя
-      let userId = params.userId;
-      if (!userId && params.employee_name) {
-        const usersResult = await this.getUsersByNames({ names: [params.employee_name] });
-        if (usersResult.success && usersResult.data.length > 0) {
-          userId = usersResult.data[0].userId;
-        } else {
-          return {
-            success: false,
-            data: [],
-            message: 'Пользователь не найден'
-          };
-        }
+      if (!userId) {
+        console.log(`❌ Real API: userId не указан для получения трудозатрат`);
+        return {
+          success: false,
+          data: [],
+          message: 'userId обязателен для получения трудозатрат'
+        };
       }
 
       const response: AxiosResponse = await this.client.get('/stufftime', {

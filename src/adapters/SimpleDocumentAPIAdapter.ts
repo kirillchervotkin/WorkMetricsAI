@@ -206,18 +206,37 @@ export class SimpleDocumentAPIAdapter {
       // Если указано имя сотрудника, сначала найдем его точный ID
       let employeeName = params.employee_name;
 
+      let userId: string | undefined;
+
       if (employeeName) {
+        console.log(`🔍 Ищем userId для сотрудника: "${employeeName}"`);
         // Ищем пользователя по частичному совпадению имени
         const userResponse = await this.findUserByName(employeeName);
         if (userResponse.success && userResponse.data.length > 0) {
-          // Используем точное имя из API
+          userId = userResponse.data[0].id;
           employeeName = userResponse.data[0].name;
+          console.log(`✅ Найден userId: ${userId} для "${employeeName}"`);
+        } else {
+          console.log(`❌ Сотрудник "${employeeName}" не найден`);
+          return {
+            success: false,
+            data: [],
+            message: `Сотрудник "${employeeName}" не найден`
+          };
         }
       }
 
+      console.log(`📋 Запрашиваем задачи для: "${employeeName}" (userId: ${userId})`);
+
       const response = await this.api.getEmployeeTasks({
-        employee_name: employeeName,
+        userId: userId,  // Используем userId вместо employee_name
         limit: params.limit
+      });
+
+      console.log(`📋 Результат запроса задач:`, {
+        success: response.success,
+        dataLength: response.data?.length || 0,
+        message: response.message
       });
 
       if (response.success) {
@@ -319,23 +338,42 @@ export class SimpleDocumentAPIAdapter {
     limit?: number
   }): Promise<ApiResponse<TimeEntry[]>> {
     try {
-      // Если указано имя сотрудника, найдем его точное имя
+      // Если указано имя сотрудника, найдем его userId
       let employeeName = params.employee_name;
+      let userId: string | undefined;
 
       if (employeeName) {
+        console.log(`🔍 Ищем userId для сотрудника: "${employeeName}"`);
         const userResponse = await this.findUserByName(employeeName);
         if (userResponse.success && userResponse.data.length > 0) {
+          userId = userResponse.data[0].id;
           employeeName = userResponse.data[0].name;
+          console.log(`✅ Найден userId: ${userId} для "${employeeName}"`);
+        } else {
+          console.log(`❌ Сотрудник "${employeeName}" не найден`);
+          return {
+            success: false,
+            data: [],
+            message: `Сотрудник "${employeeName}" не найден`
+          };
         }
       }
 
+      console.log(`⏱️ Запрашиваем трудозатраты для: "${employeeName}" (userId: ${userId}) с ${params.start_date} по ${params.end_date}`);
+
       const response = await this.api.getTimeEntries({
-        employee_name: employeeName,
+        userId: userId,  // Используем userId вместо employee_name
         startDate: params.start_date,
         endDate: params.end_date,
         limit: params.limit
       });
-      
+
+      console.log(`⏱️ Результат запроса трудозатрат:`, {
+        success: response.success,
+        dataLength: response.data?.length || 0,
+        message: response.message
+      });
+
       if (response.success) {
         const timeEntries: TimeEntry[] = response.data.map(entry => ({
           id: entry.id,
