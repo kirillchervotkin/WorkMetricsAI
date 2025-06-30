@@ -120,7 +120,8 @@ export class SimpleDocumentAPIAdapter {
           description: entry.description,
           hours: Math.round(entry.countOfMinutes / 60 * 100) / 100,
           date: entry.date,
-          work_type: ""
+          work_type: "",
+          employee_name: entry.employee_name || "Неизвестный"
         }));
         
         return {

@@ -1,6 +1,14 @@
 import { Context } from "grammy";
 import { SimpleDocumentAPIAdapter } from "../adapters/SimpleDocumentAPIAdapter";
 import { geminiService } from "../services/gemini";
+import { sendLongMessage } from "../utils/message-splitter";
+import {
+  detectAnalyticsQuery,
+  calculateAverageTime,
+  findMaxTimeWorkers,
+  calculateTotalTime,
+  generateUserRanking
+} from "../utils/analytics";
 
 /**
  * ПРОСТОЙ ОБРАБОТЧИК ЗАПРОСОВ
@@ -15,8 +23,11 @@ export async function handleQuery(ctx: Context) {
     await ctx.replyWithChatAction("typing");
     console.log(`📝 Запрос: "${userQuery}"`);
 
-    // Получаем ВСЕ данные из системы ДО
-    const allData = await getAllDataFromDO();
+    // Извлекаем имя пользователя из запроса для фильтрации
+    const extractedUserName = extractUserNameFromQuery(userQuery);
+
+    // Получаем данные из системы ДО (с фильтрацией если нужно)
+    const allData = await getAllDataFromDO(extractedUserName);
     
     console.log("📊 Данные загружены:", {
       users: allData.users.length,
@@ -25,10 +36,10 @@ export async function handleQuery(ctx: Context) {
       timeEntries: allData.timeEntries.length
     });
 
-    // Отправляем в LLM для анализа
+    // Отправляем в LLM для анализа (включая аналитические запросы)
     const response = await analyzeWithLLM(userQuery, allData);
-    
-    await ctx.reply(response, { parse_mode: "HTML" });
+
+    await sendLongMessage(ctx, response, { parse_mode: "HTML" });
 
   } catch (error) {
     console.error("❌ Ошибка:", error);
@@ -37,11 +48,86 @@ export async function handleQuery(ctx: Context) {
 }
 
 /**
- * Получает ВСЕ данные из системы документооборота
+ * Получает данные из системы документооборота
  */
-async function getAllDataFromDO() {
+async function getAllDataFromDO(employeeName?: string) {
   const adapter = new SimpleDocumentAPIAdapter();
-  return await adapter.loadAllData();
+  return await adapter.loadAllData({ employee_name: employeeName });
+}
+
+/**
+ * Извлекает имя пользователя из запроса
+ */
+function extractUserNameFromQuery(query: string): string | undefined {
+  const normalizedQuery = query.toLowerCase();
+
+  // Список известных имен из Mock данных
+  const knownNames = [
+    'золотарев', 'червоткин', 'артем', 'мария', 'иван',
+    'петров', 'сидорова', 'козлов', 'новикова', 'морозов',
+    'лебедева', 'волков', 'соколова', 'федоров', 'кузнецова',
+    'попов', 'васильева', 'смирнов', 'михайлова', 'николаев',
+    'захарова', 'романов', 'григорьева', 'степанов', 'белова'
+  ];
+
+  // Ищем упоминание имени в запросе
+  for (const name of knownNames) {
+    if (normalizedQuery.includes(name)) {
+      // Возвращаем имя с заглавной буквы
+      return name.charAt(0).toUpperCase() + name.slice(1);
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * Обрабатывает аналитические запросы
+ */
+async function handleAnalyticsQuery(analyticsType: string, allData: any, userQuery: string): Promise<string> {
+  console.log(`📈 Выполняем аналитику: ${analyticsType}`);
+
+  try {
+    switch (analyticsType) {
+      case 'average_time':
+        const avgResult = calculateAverageTime(allData.timeEntries);
+        return avgResult.formatted;
+
+      case 'max_time':
+        const maxResult = findMaxTimeWorkers(allData.timeEntries);
+        return maxResult.formatted;
+
+      case 'total_time':
+        const totalResult = calculateTotalTime(allData.timeEntries);
+        return totalResult.formatted;
+
+      case 'user_ranking':
+        const rankingResult = generateUserRanking(allData.timeEntries);
+        return rankingResult.formatted;
+
+      case 'min_time':
+        const minResult = findMaxTimeWorkers(allData.timeEntries);
+        // Инвертируем результат для минимального времени
+        const reversedData = minResult.data.reverse();
+        const minFormatted = `🔍 <b>Сотрудники с минимальным временем работы</b>\n\n` +
+          reversedData.slice(0, 10).map((user: any, index: number) =>
+            `${index + 1}. <b>${user.name}</b>: ${user.totalHours.toFixed(1)} ч (${user.count} записей)`
+          ).join('\n');
+        return minFormatted;
+
+      case 'project_stats':
+        return generateProjectStats(allData.timeEntries);
+
+      case 'daily_stats':
+        return generateDailyStats(allData.timeEntries);
+
+      default:
+        return `❌ Неизвестный тип аналитики: ${analyticsType}`;
+    }
+  } catch (error) {
+    console.error('❌ Ошибка аналитики:', error);
+    return `❌ Ошибка при выполнении аналитики: ${error instanceof Error ? error.message : 'Неизвестная ошибка'}`;
+  }
 }
 
 /**
@@ -294,6 +380,85 @@ function analyzeTimeFilter(userQuery: string): {
     endDate: todayStr,
     description: 'весь доступный период'
   };
+}
+
+/**
+ * Генерирует статистику по проектам
+ */
+function generateProjectStats(timeEntries: any[]): string {
+  if (timeEntries.length === 0) {
+    return '❌ Нет данных для статистики проектов';
+  }
+
+  const projectStats = new Map();
+  timeEntries.forEach(entry => {
+    const projectName = entry.project_name || 'Неизвестный проект';
+    const hours = entry.hours || entry.countOfMinutes / 60 || 0;
+
+    if (!projectStats.has(projectName)) {
+      projectStats.set(projectName, { totalHours: 0, count: 0 });
+    }
+
+    const stats = projectStats.get(projectName);
+    stats.totalHours += hours;
+    stats.count += 1;
+  });
+
+  const sortedProjects = Array.from(projectStats.entries())
+    .map(([name, stats]) => ({ name, ...stats }))
+    .sort((a, b) => b.totalHours - a.totalHours);
+
+  const totalHours = sortedProjects.reduce((sum, project) => sum + project.totalHours, 0);
+
+  return `🏗️ <b>Статистика по проектам</b>\n\n` +
+    `📊 <b>Общее время:</b> ${totalHours.toFixed(1)} часов\n` +
+    `📝 <b>Всего проектов:</b> ${sortedProjects.length}\n\n` +
+    `📋 <b>Топ проектов:</b>\n` +
+    sortedProjects.slice(0, 10).map((project, index) => {
+      const percentage = ((project.totalHours / totalHours) * 100).toFixed(1);
+      return `${index + 1}. <b>${project.name}</b>\n` +
+             `   ⏱️ ${project.totalHours.toFixed(1)} ч (${percentage}%)\n` +
+             `   📝 ${project.count} записей\n`;
+    }).join('\n');
+}
+
+/**
+ * Генерирует статистику по дням
+ */
+function generateDailyStats(timeEntries: any[]): string {
+  if (timeEntries.length === 0) {
+    return '❌ Нет данных для статистики по дням';
+  }
+
+  const dailyStats = new Map();
+  timeEntries.forEach(entry => {
+    const date = entry.date || new Date().toISOString().split('T')[0];
+    const hours = entry.hours || entry.countOfMinutes / 60 || 0;
+
+    if (!dailyStats.has(date)) {
+      dailyStats.set(date, { totalHours: 0, count: 0 });
+    }
+
+    const stats = dailyStats.get(date);
+    stats.totalHours += hours;
+    stats.count += 1;
+  });
+
+  const sortedDays = Array.from(dailyStats.entries())
+    .map(([date, stats]) => ({ date, ...stats }))
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  const totalHours = sortedDays.reduce((sum, day) => sum + day.totalHours, 0);
+  const avgHoursPerDay = totalHours / sortedDays.length;
+
+  return `📅 <b>Статистика по дням</b>\n\n` +
+    `📊 <b>Общее время:</b> ${totalHours.toFixed(1)} часов\n` +
+    `📝 <b>Рабочих дней:</b> ${sortedDays.length}\n` +
+    `⏱️ <b>Среднее в день:</b> ${avgHoursPerDay.toFixed(1)} часов\n\n` +
+    `📋 <b>Последние дни:</b>\n` +
+    sortedDays.slice(0, 10).map((day, index) =>
+      `${index + 1}. <b>${day.date}</b>: ${day.totalHours.toFixed(1)} ч (${day.count} записей)`
+    ).join('\n');
 }
 
 /**

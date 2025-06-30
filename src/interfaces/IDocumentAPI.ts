@@ -23,6 +23,7 @@ export interface TimeEntry {
   taskId?: string;
   projectId?: string;
   workTypeId?: string;
+  employee_name?: string;
 }
 
 export interface Project {

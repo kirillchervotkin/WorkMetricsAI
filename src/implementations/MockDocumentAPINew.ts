@@ -141,7 +141,8 @@ export class MockDocumentAPINew implements IDocumentAPI {
             date: new Date().toISOString().split('T')[0], // Текущая дата
             taskId: `task_${entryId}`,
             projectId: `project_${entryId}`,
-            workTypeId: `worktype_${entryId}`
+            workTypeId: `worktype_${entryId}`,
+            employee_name: userData.user // Добавляем имя сотрудника
           });
         }
       }
