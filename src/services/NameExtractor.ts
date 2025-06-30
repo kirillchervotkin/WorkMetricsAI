@@ -61,22 +61,39 @@ export class NameExtractor {
     
     const queryLower = query.toLowerCase();
     
-    // Паттерны для поиска имен
+    // Паттерны для поиска имен (исключаем служебные слова)
     const namePatterns = [
       // Полные имена (Фамилия Имя Отчество)
       /([А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+)/g,
       // Имя Фамилия
       /([А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+)/g,
-      // Отдельные имена (любые с заглавной буквы)
-      /([А-ЯЁ][а-яё]{2,})/g
+      // Отдельные имена (минимум 4 буквы, исключаем короткие служебные слова)
+      /([А-ЯЁ][а-яё]{3,})/g
+    ];
+
+    // Служебные слова, которые нужно исключить
+    const excludeWords = [
+      'что', 'кто', 'где', 'когда', 'как', 'почему', 'зачем', 'откуда', 'куда',
+      'делал', 'делает', 'работал', 'работает', 'задач', 'время', 'часов',
+      'вчера', 'сегодня', 'завтра', 'неделе', 'месяце', 'году', 'дней'
     ];
 
     for (const pattern of namePatterns) {
       const matches = query.match(pattern);
       if (matches && matches.length > 0) {
-        const name = matches[0].trim();
-        console.log(`✅ Найдено имя: "${name}"`);
-        return name;
+        // Проверяем каждое найденное совпадение
+        for (const match of matches) {
+          const name = match.trim();
+          const nameLower = name.toLowerCase();
+
+          // Исключаем служебные слова
+          if (!excludeWords.includes(nameLower)) {
+            console.log(`✅ Найдено имя: "${name}"`);
+            return name;
+          } else {
+            console.log(`⚠️ Пропускаем служебное слово: "${name}"`);
+          }
+        }
       }
     }
 
