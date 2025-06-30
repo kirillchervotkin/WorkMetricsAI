@@ -111,64 +111,110 @@ export class RealDocumentAPI implements IDocumentAPI {
 
   async getAllUsers(): Promise<APIResponse<User[]>> {
     try {
-      console.log('🔍 Real API: Попытка получить всех пользователей через /stufftime');
+      console.log('🔍 Real API: Получение всех пользователей через комбинацию /stufftime + /users');
 
-      // Используем endpoint /stufftime без параметров для получения всех трудозатрат
-      // из которых можем извлечь пользователей
-      const response: AxiosResponse = await this.client.get('/stufftime');
+      // Сначала получаем уникальные имена из /stufftime
+      const stufftimeResponse = await this.client.get('/stufftime');
 
-      if (response.status === 200 && response.data) {
-        const stufftimeData = Array.isArray(response.data) ? response.data : [];
-
-        console.log(`🔍 Real API: Структура первой записи stufftime:`, stufftimeData[0] ? JSON.stringify(stufftimeData[0], null, 2) : 'Нет записей');
-        console.log(`🔍 Real API: Всего записей stufftime: ${stufftimeData.length}`);
-
-        // Извлекаем уникальных пользователей из трудозатрат
-        const userNames = new Set<string>();
-        const users: User[] = [];
-
-        stufftimeData.forEach((entry: any, index: number) => {
-          // Логируем первые 3 записи для анализа структуры
-          if (index < 3) {
-            console.log(`🔍 Запись ${index + 1}:`, {
-              user: entry.user,
-              countOfMinutes: entry.countOfMinutes,
-              allFields: Object.keys(entry)
-            });
-          }
-
-          if (entry.user && !userNames.has(entry.user)) {
-            userNames.add(entry.user);
-            users.push({
-              userName: entry.user,
-              userId: `user_${users.length + 1}` // Генерируем временный ID
-            });
-          }
-        });
-
-        console.log(`✅ Real API: Найдено уникальных пользователей: ${users.length}`);
-        if (users.length > 0) {
-          console.log(`🔍 Первые пользователи:`, users.slice(0, 3));
-        }
-
+      if (stufftimeResponse.status !== 200 || !Array.isArray(stufftimeResponse.data)) {
         return {
-          success: true,
-          data: users,
-          message: `Найдено пользователей: ${users.length}`
+          success: false,
+          data: [],
+          message: 'Не удалось получить данные трудозатрат'
         };
       }
 
+      console.log(`🔍 Real API: Найдено записей stufftime: ${stufftimeResponse.data.length}`);
+
+      // Извлекаем уникальные имена пользователей
+      const uniqueNames = new Set<string>();
+      stufftimeResponse.data.forEach((entry: any) => {
+        if (entry.user && typeof entry.user === 'string') {
+          uniqueNames.add(entry.user.trim());
+        }
+      });
+
+      console.log(`🔍 Real API: Найдено уникальных имен: ${uniqueNames.size}`);
+
+      // Теперь получаем правильные ID через /users для каждого имени
+      const users: User[] = [];
+      const nameArray = Array.from(uniqueNames);
+
+      // Обрабатываем имена батчами для избежания перегрузки API
+      for (const fullName of nameArray.slice(0, 10)) { // Ограничиваем первыми 10 для тестирования
+        try {
+          // Пробуем найти пользователя по полному имени
+          const userResponse = await this.client.get('/users', {
+            params: { users: fullName }
+          });
+
+          if (userResponse.status === 200 && userResponse.data && userResponse.data.length > 0) {
+            const userData = userResponse.data[0];
+            users.push({
+              userName: userData.userName || fullName,
+              userId: userData.userId
+            });
+            console.log(`✅ Найден пользователь: ${fullName} → ${userData.userId}`);
+          } else {
+            // Если не найден по полному имени, пробуем по фамилии
+            const lastName = fullName.split(' ')[0];
+            try {
+              const lastNameResponse = await this.client.get('/users', {
+                params: { users: lastName }
+              });
+
+              if (lastNameResponse.status === 200 && lastNameResponse.data && lastNameResponse.data.length > 0) {
+                const userData = lastNameResponse.data[0];
+                users.push({
+                  userName: userData.userName || fullName,
+                  userId: userData.userId
+                });
+                console.log(`✅ Найден пользователь по фамилии: ${lastName} → ${userData.userName} (${userData.userId})`);
+              } else {
+                console.log(`⚠️ Пользователь не найден в /users: ${fullName}`);
+                // Добавляем с временным ID
+                users.push({
+                  userName: fullName,
+                  userId: `temp_${users.length + 1}`
+                });
+              }
+            } catch (lastNameError) {
+              console.log(`❌ Ошибка поиска по фамилии ${lastName}:`, lastNameError);
+              users.push({
+                userName: fullName,
+                userId: `temp_${users.length + 1}`
+              });
+            }
+          }
+        } catch (error) {
+          console.log(`❌ Ошибка поиска пользователя ${fullName}:`, error);
+          // Добавляем с временным ID
+          users.push({
+            userName: fullName,
+            userId: `temp_${users.length + 1}`
+          });
+        }
+
+        // Небольшая пауза между запросами
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+
+      console.log(`✅ Real API: Обработано пользователей: ${users.length}`);
+      console.log('🔍 Первые пользователи:', users.slice(0, 3));
+
       return {
-        success: false,
-        data: [],
-        message: 'Не удалось получить данные'
+        success: true,
+        data: users,
+        message: `Найдено пользователей: ${users.length}`
       };
+
     } catch (error: any) {
-      console.error('❌ Real API Error (getAllUsers через stufftime):', error.message);
+      console.error('❌ Real API Error (getAllUsers):', error.message);
       return {
         success: false,
         data: [],
-        message: `Ошибка Real API: ${error.message}`
+        message: `Ошибка получения пользователей: ${error.message}`,
+        error: error.response?.data || error.message
       };
     }
   }
